@@ -21,6 +21,15 @@ class RevitTransactionGenerator:
     def __init__(self):
         self.revit_version = "2022"
         self.template = "Architectural Template"
+        self.mapping = self._load_mapping()
+    
+    def _load_mapping(self) -> Dict:
+        """Load family mapping configuration"""
+        mapping_path = Path(__file__).parent.parent / "core" / "family_mapping.json"
+        if mapping_path.exists():
+            with open(mapping_path, 'r') as f:
+                return json.load(f)
+        return {}
     
     async def generate(self, geometry_data: Dict, project_name: str) -> Dict:
         """
@@ -173,27 +182,25 @@ class RevitTransactionGenerator:
         return door_commands
     
     def _get_door_family(self, door: Dict) -> tuple:
-        """Select appropriate Revit door family"""
-        width = door.get('width', 900)
+        """Select appropriate Revit door family from mapping"""
         door_type = door.get('door_type', 'single')
+        width = door.get('width', 900)
         
-        if door_type == 'double':
-            family = "M_Double-Flush"
-            symbol = f"{int(width)}mm x 2100mm"
-        elif door_type == 'sliding':
-            family = "M_Sliding"
-            symbol = f"{int(width)}mm x 2100mm"
+        door_map = self.mapping.get('doors', {}).get(door_type, {})
+        family = door_map.get('family', "M_Single-Flush")
+        
+        # Find closest symbol
+        symbols = door_map.get('symbols', {})
+        if symbols:
+            # Sort keys to find closest
+            available_widths = sorted([int(k) for k in symbols.keys()])
+            closest_width = min(available_widths, key=lambda x: abs(x - width))
+            symbol = symbols.get(str(closest_width))
         else:
-            family = "M_Single-Flush"
-            if width >= 1000:
-                symbol = "1000mm x 2100mm"
-            elif width >= 900:
-                symbol = "900mm x 2100mm"
-            else:
-                symbol = "800mm x 2100mm"
-        
+            symbol = f"{int(width)}mm x 2100mm"
+            
         return family, symbol
-    
+
     async def _create_windows(self, windows: List[Dict]) -> List[Dict]:
         """Generate window creation commands"""
         window_commands = []
@@ -226,20 +233,17 @@ class RevitTransactionGenerator:
             window_commands.append(window_cmd)
         
         return window_commands
-    
+
     def _get_window_family(self, window: Dict) -> tuple:
-        """Select appropriate Revit window family"""
+        """Select appropriate Revit window family from mapping"""
         window_type = window.get('window_type', 'fixed')
         width = window.get('width', 1200)
         height = window.get('height', 1500)
         
-        if window_type == 'casement':
-            family = "M_Casement"
-        elif window_type == 'sliding':
-            family = "M_Sliding"
-        else:
-            family = "M_Fixed"
+        win_map = self.mapping.get('windows', {}).get(window_type, {})
+        family = win_map.get('family', "M_Fixed")
         
+        # Simple symbol generation if not in map
         symbol = f"{int(width)}mm x {int(height)}mm"
         
         return family, symbol
@@ -270,8 +274,27 @@ class RevitTransactionGenerator:
     
     async def _create_ceilings(self, ceilings: List[Dict]) -> List[Dict]:
         """Generate ceiling creation commands"""
-        # Similar to floors
-        return []
+        ceiling_commands = []
+        
+        for i, ceiling in enumerate(ceilings):
+            ceiling_cmd = {
+                "id": f"ceiling_{i}",
+                "command": "Ceiling.Create",
+                "parameters": {
+                    "boundary": ceiling['boundary'],
+                    "ceiling_type": "Compound Ceiling - 600 x 600mm Grid",
+                    "level": "Level 1",
+                    "height": ceiling.get('height', 2800)
+                },
+                "properties": {
+                    "thickness": ceiling.get('thickness', 20),
+                    "material": "Gypsum Wall Board"
+                }
+            }
+            
+            ceiling_commands.append(ceiling_cmd)
+        
+        return ceiling_commands
     
     async def _create_rooms(self, rooms: List[Dict]) -> List[Dict]:
         """Generate room creation commands"""
