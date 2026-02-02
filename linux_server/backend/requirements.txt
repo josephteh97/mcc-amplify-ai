@@ -1,0 +1,105 @@
+# requirements.txt (merged & cleaned – February 2026)
+# Removed: ifcopenshell, ezdxf (no IFC/DXF needed)
+
+# ----------------
+# Web Framework
+# ----------------
+fastapi==0.104.1
+uvicorn[standard]==0.24.0.post1   # minor patch bump if desired (safe)
+python-multipart==0.0.6
+websockets==12.0
+python-jose[cryptography]==3.3.0
+
+# ----------------
+# AI & Machine Learning
+# ----------------
+anthropic==0.7.8          # Claude AI for semantic analysis
+openai==1.6.1             # Alternative: GPT-4 Vision (optional)
+ultralytics==8.0.200      # YOLOv8 for element detection
+torch==2.1.1              # PyTorch (required by YOLO)
+torchvision==0.16.1       # Computer vision utilities
+
+# ----------------
+# Computer Vision
+# ----------------
+opencv-python==4.8.1.78   # Image processing
+Pillow==10.1.0            # → Pillow (capitalized consistently)
+pytesseract==0.3.10       # OCR for scale detection
+paddleocr==2.7.0.3        # Alternative OCR (better for Asian text)
+
+# ----------------
+# PDF Processing
+# ----------------
+PyMuPDF==1.23.7           # PDF to image / fitz
+pdf2image==1.16.3         # PDF rasterization
+PyPDF2==3.0.1             # PDF text extraction
+camelot-py[cv]==0.11.0    # Table / vector extraction from PDF
+
+# ----------------
+# 3D Processing & Geometry
+# ----------------
+numpy==1.26.2             # Numerical computations
+open3d==0.18.0            # 3D geometry processing
+trimesh==4.0.5            # Mesh operations
+scipy==1.11.4             # Scientific computing
+pygltflib==1.16.1         # glTF export for web viewer
+
+# ----------------
+# Database
+# ----------------
+sqlalchemy==2.0.23
+alembic==1.12.1
+psycopg2-binary==2.9.9    # PostgreSQL driver
+
+# ----------------
+# HTTP & Networking
+# ----------------
+requests==2.31.0          # Sync HTTP (Revit server, etc.)
+httpx==0.25.2             # Async HTTP client
+aiohttp==3.9.1            # Alternative async HTTP
+
+# ----------------
+# Data Validation
+# ----------------
+pydantic==2.5.2
+pydantic-settings==2.1.0
+
+# ----------------
+# File Operations & Env
+# ----------------
+aiofiles==23.2.1          # Async file I/O
+python-dotenv==1.0.0      # Environment variables
+
+# ----------------
+# Task Queue (Optional – comment out if unused)
+# ----------------
+# celery==5.3.4
+# redis==5.0.1
+
+# ----------------
+# Logging & Utilities
+# ----------------
+loguru==0.7.2             # Better logging
+email-validator==2.1.0    # Email validation
+
+# ----------------
+# Testing
+# ----------------
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+
+# GPU Support:
+# -----------
+# For faster YOLO inference with GPU:
+# - Install CUDA toolkit
+# - Install: torch with CUDA support
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#
+# Production Additions:
+# --------------------
+# Consider adding:
+# - gunicorn (production WSGI server)
+# - sentry-sdk (error monitoring)
+# - prometheus-client (metrics)
+# - python-jose (JWT auth)
