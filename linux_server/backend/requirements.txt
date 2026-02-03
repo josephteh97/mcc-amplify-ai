@@ -15,17 +15,17 @@ python-jose[cryptography]==3.3.0
 # ----------------
 anthropic==0.7.8          # Claude AI for semantic analysis
 openai==1.6.1             # Alternative: GPT-4 Vision (optional)
-ultralytics==8.0.200      # YOLOv8 for element detection
+ultralytics==8.4.9      # YOLOv8 for element detection
 torch==2.1.1              # PyTorch (required by YOLO)
 torchvision==0.16.1       # Computer vision utilities
 
 # ----------------
 # Computer Vision
 # ----------------
-opencv-python==4.8.1.78   # Image processing
+opencv-python>=4.11.0.86   # Image processing
 Pillow==10.1.0            # → Pillow (capitalized consistently)
 pytesseract==0.3.10       # OCR for scale detection
-paddleocr==2.7.0.3        # Alternative OCR (better for Asian text)
+paddleocr==3.4.0        # Alternative OCR (better for Asian text)
 
 # ----------------
 # PDF Processing
@@ -80,7 +80,7 @@ python-dotenv==1.0.0      # Environment variables
 # Logging & Utilities
 # ----------------
 loguru==0.7.2             # Better logging
-email-validator==2.1.0    # Email validation
+email-validator==2.3.0    # Email validation
 
 # ----------------
 # Testing
