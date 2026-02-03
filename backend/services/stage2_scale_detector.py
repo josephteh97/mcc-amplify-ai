@@ -11,8 +11,8 @@ from loguru import logger
 import os
 
 
-class ScaleDetector:
-    """Detect and calibrate floor plan scale"""
+class Stage2ScaleDetector:
+    """Detect scale and calibrate pixels-to-mm"""
     
     def __init__(self):
         self.default_scale = int(os.getenv("DEFAULT_SCALE", 100))

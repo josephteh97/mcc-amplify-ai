@@ -8,12 +8,14 @@ from pathlib import Path
 import asyncio
 from loguru import logger
 
-from services.pdf_processor import PDFProcessor
-from services.scale_detector import ScaleDetector
-from services.element_detector import ElementDetector
-from services.claude_analyzer import ClaudeAnalyzer
-from services.geometry_builder import GeometryBuilder
-from services.revit_transaction import RevitTransactionGenerator
+from services.stage1_pdf_processor import Stage1PDFProcessor
+from services.stage2_scale_detector import Stage2ScaleDetector
+from services.stage3_element_detector import Stage3ElementDetector
+from services.stage4_semantic_analyzer import Stage4SemanticAnalyzer
+from services.stage5_geometry_generator import Stage5GeometryGenerator
+from services.stage6_bim_enrichment import Stage6BIMEnrichment
+from services.stage7_exporters.rvt_exporter import RVTExporter
+from services.stage7_exporters.gltf_exporter import GLTFExporter
 from services.revit_client import RevitClient
 from api.websocket import manager as ws_manager
 
@@ -24,12 +26,14 @@ class FloorPlanPipeline:
     """
     
     def __init__(self):
-        self.pdf_processor = PDFProcessor()
-        self.scale_detector = ScaleDetector()
-        self.element_detector = ElementDetector()
-        self.claude_analyzer = ClaudeAnalyzer()
-        self.geometry_builder = GeometryBuilder()
-        self.revit_transaction = RevitTransactionGenerator()
+        self.pdf_processor = Stage1PDFProcessor()
+        self.scale_detector = Stage2ScaleDetector()
+        self.element_detector = Stage3ElementDetector()
+        self.semantic_analyzer = Stage4SemanticAnalyzer()
+        self.geometry_generator = Stage5GeometryGenerator()
+        self.bim_enrichment = Stage6BIMEnrichment()
+        self.rvt_exporter = RVTExporter()
+        self.gltf_exporter = GLTFExporter()
         self.revit_client = RevitClient()
     
     async def process(
@@ -63,16 +67,16 @@ class FloorPlanPipeline:
             logger.info(f"[{job_id}] Stage 2 complete: Scale = {scale_info['scale']}")
             
             # Stage 3: Element Detection (YOLOv8)
-            await self._update_progress(job_id, 35, "Detecting walls, doors, windows...")
+            await self._update_progress(job_id, 35, "Detecting walls, doors, windows, columns...")
             detected_elements = await self.element_detector.detect(
                 image_data,
                 scale_info
             )
-            logger.info(f"[{job_id}] Stage 3 complete: Detected {len(detected_elements['walls'])} walls")
+            logger.info(f"[{job_id}] Stage 3 complete: Detected {len(detected_elements['walls'])} walls, {len(detected_elements['columns'])} columns")
             
             # Stage 4: Semantic Analysis (Claude AI)
             await self._update_progress(job_id, 50, "Analyzing with AI...")
-            enriched_data = await self.claude_analyzer.analyze(
+            enriched_data = await self.semantic_analyzer.analyze(
                 image_data,
                 detected_elements,
                 scale_info
@@ -81,34 +85,34 @@ class FloorPlanPipeline:
             
             # Stage 5: 3D Geometry Generation
             await self._update_progress(job_id, 65, "Generating 3D geometry...")
-            geometry_data = await self.geometry_builder.build(
+            geometry_data = await self.geometry_generator.build(
                 enriched_data,
                 scale_info
             )
             logger.info(f"[{job_id}] Stage 5 complete: 3D geometry created")
             
-            # Export glTF for web viewer
+            # Stage 7: Export to Multiple Formats
             await self._update_progress(job_id, 75, "Creating web preview...")
-            gltf_path = await self.geometry_builder.export_gltf(
+            gltf_path = await self.gltf_exporter.export(
                 geometry_data,
                 f"data/models/gltf/{job_id}.glb"
             )
             
-            # Stage 6: Generate Revit Transaction
-            await self._update_progress(job_id, 80, "Preparing Revit model...")
-            revit_transaction = await self.revit_transaction.generate(
+            # Stage 6: BIM Enrichment & Revit Transaction
+            await self._update_progress(job_id, 80, "Preparing BIM data...")
+            revit_transaction = await self.bim_enrichment.generate(
                 geometry_data,
                 project_name or f"FloorPlan_{job_id}"
             )
             
             # Save transaction JSON
             transaction_path = f"data/models/revit_transactions/{job_id}.json"
-            await self.revit_transaction.save(revit_transaction, transaction_path)
-            logger.info(f"[{job_id}] Stage 6 complete: Revit transaction generated")
+            await self.bim_enrichment.save(revit_transaction, transaction_path)
+            logger.info(f"[{job_id}] Stage 6 complete: BIM data enriched")
             
-            # Stage 7: Build RVT on Windows Server
+            # Stage 7 (Continued): Build RVT on Windows Server
             await self._update_progress(job_id, 85, "Building Revit model on Windows server...")
-            rvt_path = await self.revit_client.build_model(
+            rvt_path = await self.rvt_exporter.export(
                 transaction_path,
                 job_id
             )
@@ -131,7 +135,8 @@ class FloorPlanPipeline:
                     "walls_count": len(geometry_data['walls']),
                     "doors_count": len(geometry_data['doors']),
                     "windows_count": len(geometry_data['windows']),
-                    "rooms_count": len(geometry_data['rooms'])
+                    "rooms_count": len(geometry_data['rooms']),
+                    "columns_count": len(geometry_data.get('columns', []))
                 }
             }
             

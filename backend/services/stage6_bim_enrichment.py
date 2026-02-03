@@ -12,7 +12,7 @@ from datetime import datetime
 from loguru import logger
 
 
-class RevitTransactionGenerator:
+class Stage6BIMEnrichment:
     """Generate Revit API transaction commands for native solid objects"""
     
     def __init__(self):
@@ -50,6 +50,7 @@ class RevitTransactionGenerator:
             "walls": await self._create_wall_commands(geometry_data['walls']),
             "doors": await self._create_door_commands(geometry_data['doors']),
             "windows": await self._create_window_commands(geometry_data['windows']),
+            "columns": await self._create_column_commands(geometry_data.get('columns', [])),
             "floors": await self._create_floor_commands(geometry_data['floors']),
             "rooms": await self._create_room_commands(geometry_data['rooms']),
             "views": await self._create_view_commands()
@@ -129,6 +130,47 @@ class RevitTransactionGenerator:
             }
             commands.append(cmd)
         return commands
+
+    async def _create_column_commands(self, columns: List[Dict]) -> List[Dict]:
+        """Commands for Column.Create (Native Structural Columns)"""
+        commands = []
+        for i, column in enumerate(columns):
+            family, symbol = self._get_column_family(column)
+            
+            cmd = {
+                "id": f"column_{i}",
+                "command": "Column.Create",
+                "parameters": {
+                    "family": family,
+                    "symbol": symbol,
+                    "location": column["location"],
+                    "level": "Level 1",
+                    "height": column.get("height", 2800),
+                    "rotation": 0
+                },
+                "properties": {
+                    "width": column.get("width", 300),
+                    "depth": column.get("depth", 300),
+                    "material": column.get("material", "Concrete")
+                }
+            }
+            commands.append(cmd)
+        return commands
+
+    def _get_column_family(self, column: Dict) -> tuple:
+        """Select Revit Column Family based on shape"""
+        shape = column.get("shape", "rectangular")
+        width = column.get("width", 300)
+        depth = column.get("depth", 300)
+        
+        if shape == "circular":
+            family = "M_Concrete-Round-Column"
+            symbol = f"{int(width)}mm"
+        else:
+            family = "M_Concrete-Rectangular-Column"
+            symbol = f"{int(width)} x {int(depth)}mm"
+            
+        return family, symbol
 
     def _get_family_info(self, element: Dict, e_type: str) -> tuple:
         """Get family and symbol from mapping"""

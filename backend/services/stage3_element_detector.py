@@ -12,7 +12,7 @@ from loguru import logger
 import os
 
 
-class ElementDetector:
+class Stage3ElementDetector:
     """Detect architectural elements using YOLOv8"""
     
     def __init__(self):
@@ -62,7 +62,8 @@ class ElementDetector:
             "windows": [],
             "stairs": [],
             "rooms": [],
-            "fixtures": []
+            "fixtures": [],
+            "columns": []
         }
         
         for result in results:
@@ -106,7 +107,8 @@ class ElementDetector:
             2: "window",
             3: "stair",
             4: "room",
-            5: "fixture"
+            5: "fixture",
+            6: "column"
         }
         return mapping.get(class_id)
     
@@ -147,8 +149,25 @@ class ElementDetector:
             element.update(await self._analyze_door(bbox, image))
         elif element_type == "window":
             element.update(await self._analyze_window(bbox, image))
+        elif element_type == "column":
+            element.update(await self._analyze_column(bbox, image))
         
         return element
+    
+    async def _analyze_column(self, bbox, image) -> Dict:
+        """Extract column-specific features"""
+        x1, y1, x2, y2 = [int(v) for v in bbox]
+        width_px = x2 - x1
+        height_px = y2 - y1
+        
+        # Simple classification: square vs circular columns (based on aspect ratio)
+        aspect_ratio = width_px / height_px
+        is_circular = 0.9 < aspect_ratio < 1.1 # Heuristic
+        
+        return {
+            "column_shape": "circular" if is_circular else "rectangular",
+            "material": "Concrete" # Default for structural columns
+        }
     
     async def _analyze_wall(self, bbox, image) -> Dict:
         """Extract wall-specific features"""

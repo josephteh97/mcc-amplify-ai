@@ -13,7 +13,7 @@ from PIL import Image
 import io
 
 
-class ClaudeAnalyzer:
+class Stage4SemanticAnalyzer:
     """Use Claude AI for semantic understanding"""
     
     def __init__(self):

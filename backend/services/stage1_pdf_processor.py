@@ -14,8 +14,8 @@ from loguru import logger
 import os
 
 
-class PDFProcessor:
-    """Process PDF floor plans into analyzable images"""
+class Stage1PDFProcessor:
+    """Extract images and vectors from PDF"""
     
     def __init__(self):
         self.dpi = int(os.getenv("PDF_DPI", 300))

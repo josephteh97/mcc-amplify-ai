@@ -50,6 +50,9 @@ namespace RevitService
                     // Create windows
                     CreateWindows(transaction.Windows);
                     
+                    // Create columns
+                    CreateColumns(transaction.Columns);
+                    
                     // Create floors
                     CreateFloors(transaction.Floors);
                     
@@ -182,6 +185,46 @@ namespace RevitService
             }
         }
 
+        private void CreateColumns(List<ColumnCommand> columns)
+        {
+            if (columns == null) return;
+
+            foreach (var colCmd in columns)
+            {
+                FamilySymbol colSymbol = GetFamilySymbol(colCmd.Parameters.Family, colCmd.Parameters.Symbol);
+                if (!colSymbol.IsActive) colSymbol.Activate();
+
+                Level level = GetLevel(colCmd.Parameters.Level);
+                XYZ location = new XYZ(
+                    colCmd.Parameters.Location.X * MM_TO_FEET,
+                    colCmd.Parameters.Location.Y * MM_TO_FEET,
+                    colCmd.Parameters.Location.Z * MM_TO_FEET
+                );
+
+                FamilyInstance column = doc.Create.NewFamilyInstance(
+                    location,
+                    colSymbol,
+                    level,
+                    StructuralType.Column
+                );
+
+                // Set top level and offset to match height
+                Parameter topLevelParam = column.get_Parameter(BuiltInParameter.FAMILY_TOP_LEVEL_PARAM);
+                if (topLevelParam != null)
+                {
+                    // Find Level 2 for top level (simplified)
+                    Level topLevel = GetLevel("Level 2");
+                    topLevelParam.Set(topLevel.Id);
+                }
+
+                if (colCmd.Parameters.Rotation != 0)
+                {
+                    Line axis = Line.CreateBound(location, location + XYZ.BasisZ);
+                    ElementTransformUtils.RotateElement(doc, column.Id, axis, colCmd.Parameters.Rotation * Math.PI / 180);
+                }
+            }
+        }
+
         private void CreateFloors(List<FloorCommand> floors)
         {
             foreach (var floorCmd in floors)
@@ -279,6 +322,7 @@ namespace RevitService
         public List<WallCommand> Walls { get; set; }
         public List<DoorCommand> Doors { get; set; }
         public List<WindowCommand> Windows { get; set; }
+        public List<ColumnCommand> Columns { get; set; }
         public List<FloorCommand> Floors { get; set; }
         public List<RoomCommand> Rooms { get; set; }
         public List<ViewCommand> Views { get; set; }
@@ -294,6 +338,9 @@ namespace RevitService
     public class DoorParameters { public string Family { get; set; } public string Symbol { get; set; } public PointData Location { get; set; } public string HostWallId { get; set; } public string Level { get; set; } public double Rotation { get; set; } }
     public class WindowCommand { public WindowParameters Parameters { get; set; } }
     public class WindowParameters { public string Family { get; set; } public string Symbol { get; set; } public PointData Location { get; set; } public string HostWallId { get; set; } public string Level { get; set; } }
+    public class ColumnCommand { public ColumnParameters Parameters { get; set; } public ColumnProperties Properties { get; set; } }
+    public class ColumnParameters { public string Family { get; set; } public string Symbol { get; set; } public PointData Location { get; set; } public string Level { get; set; } public double Height { get; set; } public double Rotation { get; set; } }
+    public class ColumnProperties { public double Width { get; set; } public double Depth { get; set; } public string Material { get; set; } }
     public class FloorCommand { public FloorParameters Parameters { get; set; } }
     public class FloorParameters { public List<PointData> Boundary { get; set; } public string FloorType { get; set; } public string Level { get; set; } public bool Structural { get; set; } }
     public class RoomCommand { public RoomParameters Parameters { get; set; } }
