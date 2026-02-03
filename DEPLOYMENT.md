@@ -25,26 +25,20 @@ Complete guide for deploying the Amplify Floor Plan AI System.
 
 ```bash
 # Update system
-sudo apt update && sudo apt upgrade -y
+sudo apt update
 
 # Install system dependencies
-sudo apt install -y build-essential git curl wget
-sudo apt install -y tesseract-ocr
-sudo apt install -y poppler-utils  # For pdf2image
-sudo apt install -y libgl1-mesa-glx  # For OpenCV
+# sudo apt install -y build-essential git curl wget
+# sudo apt install -y tesseract-ocr
+# sudo apt install -y poppler-utils  # For pdf2image
+# sudo apt install -y libgl1-mesa-glx  # For OpenCV
 
-# Install Miniconda
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-source ~/.bashrc
 ```
 
 ### Step 2: Clone Repository
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/amplify-floor-plan-ai.git
-cd amplify-floor-plan-ai
+
 
 # Navigate to Linux server directory
 cd linux_server
