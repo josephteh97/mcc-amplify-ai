@@ -1,11 +1,8 @@
 # linux_server/backend/services/revit_transaction.py
 """
 Stage 6: Revit Transaction Generator
-Creates JSON with exact Revit API commands
-
-Generates precise Revit API commands from detected geometry
-No conversion - direct native Revit instructions
-
+Creates JSON with exact Revit API commands for Native Solid Modeling.
+Aligned with Windows ModelBuilder.cs data structures.
 """
 
 import json
@@ -16,7 +13,7 @@ from loguru import logger
 
 
 class RevitTransactionGenerator:
-    """Generate Revit API transaction commands"""
+    """Generate Revit API transaction commands for native solid objects"""
     
     def __init__(self):
         self.revit_version = "2022"
@@ -33,16 +30,9 @@ class RevitTransactionGenerator:
     
     async def generate(self, geometry_data: Dict, project_name: str) -> Dict:
         """
-        Generate complete Revit transaction
-        
-        Args:
-            geometry_data: 3D geometry from GeometryBuilder
-            project_name: Name for the project
-            
-        Returns:
-            Complete transaction JSON
+        Generate complete Revit transaction.
         """
-        logger.info(f"Generating Revit transaction for {project_name}")
+        logger.info(f"Generating Revit Native Transaction for {project_name}")
         
         transaction = {
             "version": self.revit_version,
@@ -51,306 +41,153 @@ class RevitTransactionGenerator:
                 "name": project_name,
                 "author": "Amplify Floor Plan AI",
                 "created_date": datetime.now().isoformat(),
-                "description": "Auto-generated from floor plan PDF"
+                "description": "Auto-generated Native Revit Model"
             },
-            "units": {
-                "length": "millimeters",
-                "area": "square_meters"
-            },
-            "levels": await self._create_levels(geometry_data),
-            "walls": await self._create_walls(geometry_data['walls']),
-            "doors": await self._create_doors(geometry_data['doors']),
-            "windows": await self._create_windows(geometry_data['windows']),
-            "floors": await self._create_floors(geometry_data['floors']),
-            "ceilings": await self._create_ceilings(geometry_data.get('ceilings', [])),
-            "rooms": await self._create_rooms(geometry_data['rooms']),
-            "views": await self._create_views()
+            "levels": [
+                {"name": "Level 1", "elevation": 0},
+                {"name": "Level 2", "elevation": 3000}
+            ],
+            "walls": await self._create_wall_commands(geometry_data['walls']),
+            "doors": await self._create_door_commands(geometry_data['doors']),
+            "windows": await self._create_window_commands(geometry_data['windows']),
+            "floors": await self._create_floor_commands(geometry_data['floors']),
+            "rooms": await self._create_room_commands(geometry_data['rooms']),
+            "views": await self._create_view_commands()
         }
         
         return transaction
-    
-    async def _create_levels(self, geometry_data: Dict) -> List[Dict]:
-        """Create level definitions"""
-        levels = [
-            {
-                "name": "Level 1",
-                "elevation": 0,
-                "create_plan_view": True,
-                "create_ceiling_plan": True
-            },
-            {
-                "name": "Level 2",
-                "elevation": 3000,  # mm
-                "create_plan_view": False,
-                "create_ceiling_plan": False
-            }
-        ]
-        
-        return levels
-    
-    async def _create_walls(self, walls: List[Dict]) -> List[Dict]:
-        """Generate wall creation commands"""
-        wall_commands = []
-        
+
+    async def _create_wall_commands(self, walls: List[Dict]) -> List[Dict]:
+        """Commands for Wall.Create (Native Solid)"""
+        commands = []
         for i, wall in enumerate(walls):
-            # Determine wall type based on properties
             wall_type = self._get_wall_type(wall)
             
-            wall_cmd = {
-                "id": f"wall_{i}",
+            cmd = {
                 "command": "Wall.Create",
                 "parameters": {
                     "curve": {
-                        "type": "Line",
-                        "start": {
-                            "x": wall['start_x'],
-                            "y": wall['start_y'],
-                            "z": 0
-                        },
-                        "end": {
-                            "x": wall['end_x'],
-                            "y": wall['end_y'],
-                            "z": 0
-                        }
+                        "start": wall["start_point"],
+                        "end": wall["end_point"]
                     },
                     "wall_type": wall_type,
                     "level": "Level 1",
-                    "height": wall.get('height', 2800),
+                    "height": wall["height"],
                     "offset": 0,
                     "flip": False,
-                    "structural": wall.get('structural', False)
+                    "structural": wall["is_structural"]
                 },
                 "properties": {
-                    "function": wall.get('wall_function', 'Interior'),
-                    "material": wall.get('material', 'Concrete'),
-                    "thickness": wall.get('thickness', 200),
-                    "fire_rating": wall.get('fire_rating', ''),
-                    "comments": f"Auto-generated wall {i}"
+                    "function": wall["function"],
+                    "material": wall["material"],
+                    "fire_rating": ""
                 }
             }
-            
-            wall_commands.append(wall_cmd)
-        
-        return wall_commands
-    
+            commands.append(cmd)
+        return commands
+
     def _get_wall_type(self, wall: Dict) -> str:
-        """Map wall properties to Revit wall type"""
-        thickness = wall.get('thickness', 200)
-        
-        if thickness >= 300:
-            return "Generic - 300mm"
-        elif thickness >= 200:
-            return "Generic - 200mm"
-        elif thickness >= 150:
-            return "Generic - 150mm"
-        else:
-            return "Generic - 100mm"
-    
-    async def _create_doors(self, doors: List[Dict]) -> List[Dict]:
-        """Generate door creation commands"""
-        door_commands = []
-        
+        """Map thickness to Revit Wall Type"""
+        wall_function = wall.get('function', 'Interior')
+        if wall_function.lower() == 'exterior':
+            return self.mapping.get('walls', {}).get('exterior', "Generic - 300mm")
+        return self.mapping.get('walls', {}).get('interior', "Generic - 200mm")
+
+    async def _create_door_commands(self, doors: List[Dict]) -> List[Dict]:
+        """Commands for FamilyInstance.Create (Native Doors)"""
+        commands = []
         for i, door in enumerate(doors):
-            family, symbol = self._get_door_family(door)
+            family, symbol = self._get_family_info(door, "door")
             
-            door_cmd = {
-                "id": f"door_{i}",
-                "command": "FamilyInstance.Create",
+            cmd = {
                 "parameters": {
                     "family": family,
                     "symbol": symbol,
-                    "location": {
-                        "x": door['center'][0],
-                        "y": door['center'][1],
-                        "z": 0
-                    },
+                    "location": door["location"],
                     "host_wall_id": f"wall_{door.get('host_wall_id', 0)}",
                     "level": "Level 1",
-                    "rotation": door.get('rotation', 0)
-                },
-                "properties": {
-                    "width": door.get('width', 900),
-                    "height": door.get('height', 2100),
-                    "swing_direction": door.get('swing_direction', 'right'),
-                    "fire_rating": door.get('fire_rating', ''),
-                    "material": door.get('material', 'Wood')
+                    "rotation": 0
                 }
             }
+            commands.append(cmd)
+        return commands
+
+    async def _create_window_commands(self, windows: List[Dict]) -> List[Dict]:
+        """Commands for FamilyInstance.Create (Native Windows)"""
+        commands = []
+        for i, window in enumerate(windows):
+            family, symbol = self._get_family_info(window, "window")
             
-            door_commands.append(door_cmd)
+            cmd = {
+                "parameters": {
+                    "family": family,
+                    "symbol": symbol,
+                    "location": window["location"],
+                    "host_wall_id": f"wall_{window.get('host_wall_id', 0)}",
+                    "level": "Level 1"
+                }
+            }
+            commands.append(cmd)
+        return commands
+
+    def _get_family_info(self, element: Dict, e_type: str) -> tuple:
+        """Get family and symbol from mapping"""
+        type_name = element.get('type_name', 'Standard').lower()
+        width = element.get('width', 900)
         
-        return door_commands
-    
-    def _get_door_family(self, door: Dict) -> tuple:
-        """Select appropriate Revit door family from mapping"""
-        door_type = door.get('door_type', 'single')
-        width = door.get('width', 900)
+        type_map = self.mapping.get(f'{e_type}s', {}).get(type_name, {})
+        family = type_map.get('family', "M_Single-Flush" if e_type == "door" else "M_Fixed")
         
-        door_map = self.mapping.get('doors', {}).get(door_type, {})
-        family = door_map.get('family', "M_Single-Flush")
-        
-        # Find closest symbol
-        symbols = door_map.get('symbols', {})
+        symbols = type_map.get('symbols', {})
         if symbols:
-            # Sort keys to find closest
-            available_widths = sorted([int(k) for k in symbols.keys()])
-            closest_width = min(available_widths, key=lambda x: abs(x - width))
-            symbol = symbols.get(str(closest_width))
+            widths = sorted([int(k) for k in symbols.keys()])
+            closest = min(widths, key=lambda x: abs(x - width))
+            symbol = symbols.get(str(closest))
         else:
             symbol = f"{int(width)}mm x 2100mm"
             
         return family, symbol
 
-    async def _create_windows(self, windows: List[Dict]) -> List[Dict]:
-        """Generate window creation commands"""
-        window_commands = []
-        
-        for i, window in enumerate(windows):
-            family, symbol = self._get_window_family(window)
-            
-            window_cmd = {
-                "id": f"window_{i}",
-                "command": "FamilyInstance.Create",
-                "parameters": {
-                    "family": family,
-                    "symbol": symbol,
-                    "location": {
-                        "x": window['center'][0],
-                        "y": window['center'][1],
-                        "z": window.get('sill_height', 900)
-                    },
-                    "host_wall_id": f"wall_{window.get('host_wall_id', 0)}",
-                    "level": "Level 1"
-                },
-                "properties": {
-                    "width": window.get('width', 1200),
-                    "height": window.get('height', 1500),
-                    "sill_height": window.get('sill_height', 900),
-                    "window_type": window.get('window_type', 'Fixed')
-                }
-            }
-            
-            window_commands.append(window_cmd)
-        
-        return window_commands
-
-    def _get_window_family(self, window: Dict) -> tuple:
-        """Select appropriate Revit window family from mapping"""
-        window_type = window.get('window_type', 'fixed')
-        width = window.get('width', 1200)
-        height = window.get('height', 1500)
-        
-        win_map = self.mapping.get('windows', {}).get(window_type, {})
-        family = win_map.get('family', "M_Fixed")
-        
-        # Simple symbol generation if not in map
-        symbol = f"{int(width)}mm x {int(height)}mm"
-        
-        return family, symbol
-    
-    async def _create_floors(self, floors: List[Dict]) -> List[Dict]:
-        """Generate floor creation commands"""
-        floor_commands = []
-        
+    async def _create_floor_commands(self, floors: List[Dict]) -> List[Dict]:
+        """Commands for Floor.Create (Native Solid)"""
+        commands = []
         for i, floor in enumerate(floors):
-            floor_cmd = {
-                "id": f"floor_{i}",
-                "command": "Floor.Create",
+            cmd = {
                 "parameters": {
-                    "boundary": floor['boundary'],  # List of points
+                    "boundary": floor["boundary_points"],
                     "floor_type": "Generic - 200mm",
                     "level": "Level 1",
                     "structural": True
-                },
-                "properties": {
-                    "thickness": 200,
-                    "material": "Concrete"
                 }
             }
-            
-            floor_commands.append(floor_cmd)
-        
-        return floor_commands
-    
-    async def _create_ceilings(self, ceilings: List[Dict]) -> List[Dict]:
-        """Generate ceiling creation commands"""
-        ceiling_commands = []
-        
-        for i, ceiling in enumerate(ceilings):
-            ceiling_cmd = {
-                "id": f"ceiling_{i}",
-                "command": "Ceiling.Create",
-                "parameters": {
-                    "boundary": ceiling['boundary'],
-                    "ceiling_type": "Compound Ceiling - 600 x 600mm Grid",
-                    "level": "Level 1",
-                    "height": ceiling.get('height', 2800)
-                },
-                "properties": {
-                    "thickness": ceiling.get('thickness', 20),
-                    "material": "Gypsum Wall Board"
-                }
-            }
-            
-            ceiling_commands.append(ceiling_cmd)
-        
-        return ceiling_commands
-    
-    async def _create_rooms(self, rooms: List[Dict]) -> List[Dict]:
-        """Generate room creation commands"""
-        room_commands = []
-        
+            commands.append(cmd)
+        return commands
+
+    async def _create_room_commands(self, rooms: List[Dict]) -> List[Dict]:
+        """Commands for Room.Create (Native Revit Space)"""
+        commands = []
         for i, room in enumerate(rooms):
-            room_cmd = {
-                "id": f"room_{i}",
-                "command": "Room.Create",
+            cmd = {
                 "parameters": {
-                    "name": room.get('name', f'Room {i+1}'),
+                    "name": room["name"],
                     "number": str(i + 1),
                     "level": "Level 1",
-                    "point": {
-                        "x": room['center'][0],
-                        "y": room['center'][1]
-                    }
-                },
-                "properties": {
-                    "department": room.get('purpose', 'General'),
-                    "area": room.get('area_sqm', 0),
-                    "comments": room.get('comments', '')
+                    "point": room["center_point"]
                 }
             }
-            
-            room_commands.append(room_cmd)
-        
-        return room_commands
-    
-    async def _create_views(self) -> List[Dict]:
-        """Generate view creation commands"""
-        views = [
-            {
-                "command": "View.Create",
-                "parameters": {
-                    "view_type": "FloorPlan",
-                    "name": "Ground Floor Plan",
-                    "level": "Level 1"
-                }
-            },
-            {
-                "command": "View.Create",
-                "parameters": {
-                    "view_type": "3D",
-                    "name": "3D View"
-                }
-            }
+            commands.append(cmd)
+        return commands
+
+    async def _create_view_commands(self) -> List[Dict]:
+        """Commands for View.Create (Native Views)"""
+        return [
+            {"parameters": {"view_type": "3D", "name": "3D View"}},
+            {"parameters": {"view_type": "FloorPlan", "name": "Level 1 Plan", "level": "Level 1"}}
         ]
-        
-        return views
-    
+
     async def save(self, transaction: Dict, output_path: str):
         """Save transaction to JSON file"""
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        
         with open(output_path, 'w') as f:
             json.dump(transaction, f, indent=2)
-        
-        logger.info(f"Revit transaction saved to {output_path}")
+        logger.info(f"Native Revit Transaction saved to {output_path}")

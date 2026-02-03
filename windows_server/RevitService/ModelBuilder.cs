@@ -228,7 +228,11 @@ namespace RevitService
                         .Cast<ViewFamilyType>()
                         .FirstOrDefault(x => x.ViewFamily == ViewFamily.ThreeDimensional);
                     
-                    View3D.CreatePerspective(doc, viewFamilyType.Id);
+                    View3D view3d = View3D.CreatePerspective(doc, viewFamilyType.Id);
+                    view3d.Name = viewCmd.Parameters.Name;
+                    
+                    // Set display style to Realistic for better visibility
+                    view3d.get_Parameter(BuiltInParameter.MODEL_GRAPHICS_STYLE).Set(6); // 6 = Realistic
                 }
             }
         }
