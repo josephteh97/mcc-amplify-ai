@@ -186,3 +186,5 @@ namespace RevitService
         }
     }
 }
+
+// if the Revit is already using mm, do we need to convert?
