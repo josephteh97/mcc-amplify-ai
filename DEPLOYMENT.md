@@ -43,21 +43,34 @@ Since Windows Revit is not ready yet, we'll deploy in phases:
 sudo apt update && sudo apt upgrade -y
 
 # Install essential build tools
-sudo apt install -y build-essential git curl wget nano
+sudo apt install -y build-essential git curl wget nano software-properties-common
 
-# Install system dependencies
-sudo apt install -y tesseract-ocr       # For OCR
-sudo apt install -y poppler-utils       # For PDF processing
-sudo apt install -y libgl1-mesa-glx     # For OpenCV
-sudo apt install -y libglib2.0-0        # For OpenCV
+# Install OpenCV dependencies (Ubuntu 22.04+ compatible)
+sudo apt install -y \
+    libgl1-mesa-dev \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1
 
-# Install Node.js 18.x
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Install PDF and OCR tools
+sudo apt install -y \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    poppler-utils \
+    ghostscript
+
+# Install Node.js 20.x LTS (Current stable version)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
 sudo apt install -y nodejs
 
 # Verify installations
-node --version   # Should show v18.x.x
-npm --version    # Should show 9.x.x or higher
+node --version   # Should show v20.x.x
+npm --version    # Should show 10.x.x
+tesseract --version  # Should show Tesseract 4.x or 5.x
+
+echo "✓ All system dependencies installed successfully!"
 ```
 
 ### Step 2: Install Miniconda (5 minutes)
