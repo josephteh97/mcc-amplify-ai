@@ -1,112 +1,312 @@
-# Deployment Guide
+# Complete Deployment Guide
+## Ubuntu-First Approach (Windows Revit Later)
 
-Complete guide for deploying the Amplify Floor Plan AI System.
+---
 
-## Prerequisites
+## 🎯 Deployment Strategy
 
-### Linux Server
-- Ubuntu 20.04 LTS or later
-- 32GB RAM (16GB minimum)
-- 8+ CPU cores
-- 500GB SSD storage
-- Static IP address or domain name
+Since Windows Revit is not ready yet, we'll deploy in phases:
 
-### Windows Server
-- Windows Server 2019+ or Windows 10/11 Pro
-- Autodesk Revit 2022 or later with valid license
-- 16GB RAM minimum
-- 4+ CPU cores
-- .NET 6.0 SDK
-- Static IP address on same network as Linux server
+**Phase 1:** Ubuntu system (Stages 1-6) - **DO THIS NOW**
+- Upload PDFs
+- AI analysis
+- 3D geometry
+- Generate Revit transaction JSON
+- Test everything except final RVT export
 
-## Part 1: Linux Server Setup
+**Phase 2:** Windows Revit server - **DO LATER**
+- Add RVT export capability when Windows is ready
 
-### Step 1: System Preparation
+---
+
+## 📋 Prerequisites Checklist
+
+### Ubuntu Machine (Your Development Machine)
+- [ ] Ubuntu 20.04 LTS or 22.04 LTS
+- [ ] 16GB RAM minimum (32GB recommended)
+- [ ] 100GB free disk space
+- [ ] Internet connection
+- [ ] sudo/root access
+
+### Required Accounts
+- [ ] Anthropic account (for Claude API)
+- [ ] Credit card for API usage (~$20/month)
+
+---
+
+## Part 1: Ubuntu System Setup (Phase 1)
+
+### Step 1: System Preparation (5 minutes)
 
 ```bash
-# Update system
-sudo apt update
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install essential build tools
+sudo apt install -y build-essential git curl wget nano
 
 # Install system dependencies
-# sudo apt install -y build-essential git curl wget
-# sudo apt install -y tesseract-ocr
-# sudo apt install -y poppler-utils  # For pdf2image
-# sudo apt install -y libgl1-mesa-glx  # For OpenCV
+sudo apt install -y tesseract-ocr       # For OCR
+sudo apt install -y poppler-utils       # For PDF processing
+sudo apt install -y libgl1-mesa-glx     # For OpenCV
+sudo apt install -y libglib2.0-0        # For OpenCV
 
+# Install Node.js 18.x
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Verify installations
+node --version   # Should show v18.x.x
+npm --version    # Should show 9.x.x or higher
 ```
 
-### Step 2: Clone Repository
+### Step 2: Install Miniconda (5 minutes)
 
 ```bash
+# Download Miniconda
+cd ~
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 
+# Install Miniconda
+bash Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda3
 
-# Navigate to Linux server directory
-cd linux_server
+# Initialize conda
+$HOME/miniconda3/bin/conda init bash
+
+# Reload shell
+source ~/.bashrc
+
+# Verify installation
+conda --version  # Should show conda 23.x.x or higher
 ```
 
-### Step 3: Create Conda Environment
+### Step 3: Clone Repository (2 minutes)
 
 ```bash
-# Create environment from yml
+# Navigate to home directory
+cd ~
+
+# Clone the repository
+git clone https://github.com/josephteh97/mcc-amplify-ai.git
+
+# Enter project directory
+cd mcc-amplify-ai
+
+# Check structure
+ls -la
+# You should see: linux_server/, windows_server/, README.md, etc.
+```
+
+### Step 4: Setup Linux Server (10 minutes)
+
+```bash
+# Navigate to linux server
+cd ~/mcc-amplify-ai/linux_server
+
+# Create conda environment
 conda env create -f environment.yml
+
+# This will take 5-10 minutes
+# It installs Python 3.10 and all dependencies
 
 # Activate environment
 conda activate floorplan-ai
 
-# Verify installation
+# Verify Python version
 python --version  # Should show Python 3.10.x
+
+# Verify key packages
+python -c "import fastapi; print('FastAPI OK')"
+python -c "import anthropic; print('Anthropic OK')"
+python -c "import cv2; print('OpenCV OK')"
 ```
 
-### Step 4: Install Backend Dependencies
+### Step 5: Install Backend Dependencies (5 minutes)
 
 ```bash
-cd backend
+# Navigate to backend
+cd ~/mcc-amplify-ai/linux_server/backend
+
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Download YOLOv8 weights (if not included)
-# This will be done automatically on first run, or:
-# python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+# This installs additional packages not in conda
+
+# Verify critical imports
+python -c "import ultralytics; print('YOLO OK')"
+python -c "import trimesh; print('Trimesh OK')"
 ```
 
-### Step 5: Install Frontend Dependencies
+### Step 6: Install Frontend Dependencies (10 minutes)
 
 ```bash
-cd ../frontend
+# Navigate to frontend
+cd ~/mcc-amplify-ai/linux_server/frontend
+
+# Install Node.js dependencies
 npm install
-npm run build  # Build for production
+
+# This will take 5-10 minutes
+# Downloads React, Vite, Three.js, etc.
+
+# Build frontend for production
+npm run build
+
+# This creates the 'dist' folder with optimized files
 ```
 
-### Step 6: Configure Environment
+### Step 7: Configure Environment (5 minutes)
 
 ```bash
-cd ..
+# Go back to linux_server root
+cd ~/mcc-amplify-ai/linux_server
+
+# Create .env file from example
 cp .env.example .env
+
+# Edit .env file
 nano .env
 ```
 
-Edit the following critical values:
-- `ANTHROPIC_API_KEY`: Your Claude API key
-- `WINDOWS_REVIT_SERVER`: IP address of Windows machine (e.g., http://192.168.1.100:5000)
-- `REVIT_SERVER_API_KEY`: Secure random string (must match Windows config)
-
-### Step 7: Setup Database
+**Update these critical values:**
 
 ```bash
-# Create database directory
-mkdir -p data/database
+# ============================================
+# REQUIRED: Update these values
+# ============================================
 
-# Run migrations (if using PostgreSQL)
-cd backend
-alembic upgrade head
+# 1. Get your Claude API key from https://console.anthropic.com/
+ANTHROPIC_API_KEY=sk-ant-api03-YOUR_ACTUAL_KEY_HERE
+
+# 2. Windows server (LEAVE AS IS FOR NOW - we'll update later)
+WINDOWS_REVIT_SERVER=http://localhost:5000
+REVIT_SERVER_API_KEY=temporary-key-for-now
+
+# 3. Application settings (can leave as default)
+APP_HOST=0.0.0.0
+APP_PORT=8000
+DEBUG=true
+
+# 4. File upload settings
+MAX_UPLOAD_SIZE=52428800
+ALLOWED_EXTENSIONS=pdf,jpg,jpeg,png
+
+# 5. Processing defaults
+DEFAULT_WALL_HEIGHT=2800
+DEFAULT_FLOOR_THICKNESS=200
+DEFAULT_CEILING_HEIGHT=3000
 ```
 
-### Step 8: Create Systemd Service
+**Save and exit:** `Ctrl+X`, then `Y`, then `Enter`
+
+### Step 8: Create Data Directories (1 minute)
 
 ```bash
+# Create required directories
+cd ~/mcc-amplify-ai/linux_server
+
+mkdir -p data/uploads
+mkdir -p data/processed
+mkdir -p data/models/revit_transactions
+mkdir -p data/models/rvt
+mkdir -p data/models/gltf
+mkdir -p logs
+
+# Set permissions
+chmod -R 755 data/
+chmod -R 755 logs/
+
+# Verify structure
+tree -L 2 data/
+```
+
+### Step 9: Test Backend (5 minutes)
+
+```bash
+# Make sure conda environment is active
+conda activate floorplan-ai
+
+# Navigate to backend
+cd ~/mcc-amplify-ai/linux_server/backend
+
+# Run the application
+python app.py
+```
+
+**You should see:**
+```
+INFO:     Starting server on 0.0.0.0:8000
+INFO:     Application startup complete.
+✓ System ready!
+```
+
+**Open another terminal and test:**
+```bash
+# Test health endpoint
+curl http://localhost:8000/health
+
+# Should return:
+# {"status":"healthy","service":"Amplify Floor Plan AI","version":"1.0.0"}
+```
+
+**If it works:** Press `Ctrl+C` to stop the server
+
+### Step 10: Test Frontend (5 minutes)
+
+```bash
+# Open a new terminal
+# Navigate to frontend
+cd ~/mcc-amplify-ai/linux_server/frontend
+
+# Run development server
+npm run dev
+```
+
+**You should see:**
+```
+  VITE v5.0.8  ready in 2000 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+```
+
+**Test in browser:**
+1. Open: `http://localhost:5173`
+2. You should see the upload interface
+3. Press `Ctrl+C` to stop
+
+---
+
+## Part 2: Running the System (Without Windows Revit)
+
+### Option A: Manual Run (Development/Testing)
+
+**Terminal 1 - Backend:**
+```bash
+cd ~/mcc-amplify-ai/linux_server/backend
+conda activate floorplan-ai
+python app.py
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd ~/mcc-amplify-ai/linux_server/frontend
+npm run dev
+```
+
+**Access:** http://localhost:5173
+
+### Option B: Background Service (Production-like)
+
+Create systemd service for backend:
+
+```bash
+# Create service file
 sudo nano /etc/systemd/system/floorplan-backend.service
 ```
 
-Add:
+**Add this content** (replace `youruser` with your Ubuntu username):
+
 ```ini
 [Unit]
 Description=Floor Plan AI Backend
@@ -115,316 +315,448 @@ After=network.target
 [Service]
 Type=simple
 User=youruser
-WorkingDirectory=/home/youruser/amplify-floor-plan-ai/linux_server/backend
+WorkingDirectory=/home/youruser/mcc-amplify-ai/linux_server/backend
 Environment="PATH=/home/youruser/miniconda3/envs/floorplan-ai/bin"
 ExecStart=/home/youruser/miniconda3/envs/floorplan-ai/bin/python app.py
 Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+**Enable and start service:**
 ```bash
-# Enable and start service
+# Reload systemd
 sudo systemctl daemon-reload
+
+# Enable service (start on boot)
 sudo systemctl enable floorplan-backend
+
+# Start service
 sudo systemctl start floorplan-backend
+
+# Check status
 sudo systemctl status floorplan-backend
+
+# View logs
+sudo journalctl -u floorplan-backend -f
 ```
 
-### Step 9: Setup Nginx (Optional but Recommended)
+**For frontend** (production build already done):
+```bash
+# Frontend is already built in 'dist' folder
+# You can serve it with nginx (see Part 3)
+```
+
+---
+
+## Part 3: Setup Nginx (Optional but Recommended)
 
 ```bash
+# Install nginx
 sudo apt install -y nginx
 
+# Create configuration
 sudo nano /etc/nginx/sites-available/floorplan-ai
 ```
 
-Add:
+**Add this configuration:**
+
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name localhost;
 
     client_max_body_size 50M;
 
-    # Frontend
+    # Serve frontend
     location / {
-        root /home/youruser/amplify-floor-plan-ai/linux_server/frontend/dist;
+        root /home/youruser/mcc-amplify-ai/linux_server/frontend/dist;
         try_files $uri $uri/ /index.html;
     }
 
-    # Backend API
+    # Proxy API requests to backend
     location /api {
         proxy_pass http://localhost:8000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
-    # WebSocket
+    # WebSocket support
     location /ws {
         proxy_pass http://localhost:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
     }
 }
 ```
 
+**Enable and test:**
 ```bash
 # Enable site
 sudo ln -s /etc/nginx/sites-available/floorplan-ai /etc/nginx/sites-enabled/
+
+# Test configuration
 sudo nginx -t
+
+# Restart nginx
 sudo systemctl restart nginx
+
+# Enable nginx on boot
+sudo systemctl enable nginx
 ```
 
-## Part 2: Windows Server Setup
+**Access:** http://localhost or http://YOUR_IP_ADDRESS
 
-### Option A: C# Service (Recommended)
+---
 
-#### Step 1: Install Prerequisites
+## Part 4: Test the System (Without RVT Export)
 
-1. Install Autodesk Revit 2022 or later
-2. Install .NET 6.0 SDK from https://dotnet.microsoft.com/download
-3. Install Git for Windows
+### Step 1: Upload a PDF
 
-#### Step 2: Clone Repository
+1. Open browser: `http://localhost` or `http://localhost:5173`
+2. Click "Upload Floor Plan"
+3. Select a PDF file (or use test file from `tests/sample_plans/`)
 
-```powershell
-# Open PowerShell as Administrator
-cd C:\
-git clone https://github.com/yourusername/amplify-floor-plan-ai.git
-cd amplify-floor-plan-ai\windows_server\csharp_service
-```
+### Step 2: Watch Processing
 
-#### Step 3: Configure
+You'll see progress through stages:
+- ✅ Processing PDF...
+- ✅ Detecting scale...
+- ✅ Detecting elements (AI)...
+- ✅ Analyzing with Claude AI...
+- ✅ Generating 3D geometry...
+- ✅ Creating Revit instructions...
+- ⏳ Building Revit model... (This will fail - expected!)
 
-```powershell
-# Edit config.json
-notepad config.json
-```
-
-Update:
-- `api_key`: Must match Linux server's REVIT_SERVER_API_KEY
-- `template_path`: Path to your Revit template
-- `output_directory`: Where to save RVT files
-
-#### Step 4: Build Service
-
-```powershell
-# Build the C# project
-dotnet build -c Release
-
-# Test run (before installing as service)
-dotnet run --project RevitService.csproj
-```
-
-Test by visiting: http://localhost:5000/health
-
-#### Step 5: Install as Windows Service
-
-```powershell
-# Create output directory
-New-Item -ItemType Directory -Force -Path C:\RevitOutput
-New-Item -ItemType Directory -Force -Path C:\RevitService\Logs
-
-# Install as service using SC
-sc create "RevitAPIService" binPath="C:\amplify-floor-plan-ai\windows_server\csharp_service\bin\Release\net6.0\RevitService.exe" start=auto
-
-# Start service
-sc start RevitAPIService
-
-# Check status
-sc query RevitAPIService
-```
-
-#### Step 6: Configure Firewall
-
-```powershell
-# Allow port 5000
-New-NetFirewallRule -DisplayName "Revit API Service" -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow
-```
-
-### Option B: Python Service (Alternative)
-
-#### Step 1: Install Prerequisites
-
-1. Install Autodesk Revit 2022 or later
-2. Install Python 3.10 from python.org
-3. Install pythonnet dependencies
-
-#### Step 2: Install Python Dependencies
-
-```powershell
-cd C:\amplify-floor-plan-ai\windows_server\python_service
-
-# Create virtual environment
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-#### Step 3: Configure and Run
-
-```powershell
-# Edit config
-notepad config.json
-
-# Run service
-python revit_server.py
-```
-
-## Part 3: Network Configuration
-
-### Ensure Connectivity
-
-**On Linux server:**
-```bash
-# Test connectivity to Windows
-curl http://windows-ip:5000/health
-```
-
-**On Windows server:**
-```powershell
-# Test if service is accessible
-Invoke-WebRequest -Uri http://localhost:5000/health
-```
-
-### Security Considerations
-
-1. **Firewall Rules**
-   - Linux: Allow port 8000 (backend) and 80/443 (nginx)
-   - Windows: Allow port 5000 (Revit service)
-
-2. **API Key Security**
-   - Use strong random keys
-   - Rotate keys regularly
-   - Never commit to git
-
-3. **HTTPS (Production)**
-   - Use Let's Encrypt for SSL certificates
-   - Enable HTTPS in Nginx configuration
-
-## Part 4: Testing Deployment
-
-### Test Linux Backend
+### Step 3: Check Outputs
 
 ```bash
-# Check backend is running
-curl http://localhost:8000/health
+# View generated files
+cd ~/mcc-amplify-ai/linux_server/data/models
 
-# Check logs
-tail -f logs/app.log
+# Revit transaction JSON (Stage 6 output)
+cat revit_transactions/YOUR_JOB_ID.json
+
+# This JSON file will be sent to Windows server later
 ```
 
-### Test Windows Service
-
-```powershell
-# Check service status
-sc query RevitAPIService
-
-# Check logs
-Get-Content C:\RevitService\Logs\service.log -Tail 50 -Wait
-```
-
-### End-to-End Test
-
-1. Open web browser: http://linux-server-ip
-2. Upload a sample PDF floor plan
-3. Watch processing progress
-4. Download generated RVT file
-5. Open RVT in Revit to verify
-
-## Part 5: Monitoring & Maintenance
-
-### Linux Server Monitoring
+### Step 4: View Logs
 
 ```bash
-# View backend logs
+# Backend logs
+tail -f ~/mcc-amplify-ai/linux_server/logs/app.log
+
+# Or if using systemd:
 sudo journalctl -u floorplan-backend -f
-
-# Check resource usage
-htop
-
-# Check disk space
-df -h
 ```
 
-### Windows Server Monitoring
+---
 
-```powershell
-# Check service logs
-Get-EventLog -LogName Application -Source "RevitAPIService" -Newest 50
+## Part 5: Understanding What's Working
 
-# Monitor performance
-Task Manager > Performance tab
-```
+### ✅ Working Now (Stages 1-6):
 
-### Backup Strategy
+| Stage | Component | Status |
+|-------|-----------|--------|
+| 1 | PDF Processing | ✅ Working |
+| 2 | Scale Detection | ✅ Working |
+| 3 | Element Detection (YOLO) | ✅ Working |
+| 4 | AI Analysis (Claude) | ✅ Working |
+| 5 | 3D Geometry | ✅ Working |
+| 6 | Revit Transaction JSON | ✅ Working |
 
-**Linux Server:**
+**Output:** JSON file with complete Revit instructions
+
+### ⏳ Pending (Stage 7):
+
+| Stage | Component | Status |
+|-------|-----------|--------|
+| 7 | Windows Revit Server | ⏳ Not installed yet |
+
+**When Windows is ready:**
+- Install Revit 2023
+- Setup Windows service
+- Connect to Ubuntu system
+- Get native .RVT files
+
+---
+
+## Part 6: Troubleshooting
+
+### Issue: Backend won't start
+
 ```bash
-# Backup script
-#!/bin/bash
-DATE=$(date +%Y%m%d)
-tar -czf backup-$DATE.tar.gz data/ backend/database/
-```
-
-**Windows Server:**
-```powershell
-# Backup Revit templates and config
-Copy-Item -Path "C:\RevitService\config.json" -Destination "C:\Backups\config-$(Get-Date -Format 'yyyyMMdd').json"
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Linux: Backend won't start**
-```bash
-# Check Python environment
+# Check conda environment
 conda activate floorplan-ai
-which python
+which python  # Should show path with 'floorplan-ai'
 
-# Check dependencies
-pip list | grep fastapi
+# Check logs
+tail -50 ~/mcc-amplify-ai/linux_server/logs/app.log
 
-# Check environment variables
-cat .env
+# Test imports
+python -c "import fastapi, anthropic, cv2; print('OK')"
 ```
 
-**Windows: Revit service fails**
-```powershell
-# Verify Revit is installed
-Test-Path "C:\Program Files\Autodesk\Revit 2022\Revit.exe"
+### Issue: Frontend shows blank page
 
-# Check .NET version
-dotnet --version
-
-# Restart service
-sc stop RevitAPIService
-sc start RevitAPIService
-```
-
-**Connection refused between servers**
 ```bash
-# On Linux, test connection
-telnet windows-ip 5000
+# Rebuild frontend
+cd ~/mcc-amplify-ai/linux_server/frontend
+npm run build
 
-# Check firewall
-sudo ufw status
+# Check nginx configuration
+sudo nginx -t
+
+# Check nginx logs
+sudo tail -f /var/log/nginx/error.log
 ```
 
-## Production Checklist
+### Issue: "Cannot connect to Windows server"
 
-- [ ] SSL certificate installed (Let's Encrypt)
-- [ ] Firewall rules configured
-- [ ] API keys rotated and secured
-- [ ]
+**This is expected!** You don't have Windows server yet.
+
+The system will work through Stage 6 and generate the JSON file.
+Stage 7 (RVT export) will fail gracefully.
+
+**To bypass for now:**
+```bash
+# Edit .env
+nano ~/mcc-amplify-ai/linux_server/.env
+
+# Make sure this is set:
+WINDOWS_REVIT_SERVER=http://localhost:5000
+# This tells the system Windows server is not ready
+```
+
+### Issue: Claude API errors
+
+```bash
+# Check API key
+cat ~/mcc-amplify-ai/linux_server/.env | grep ANTHROPIC_API_KEY
+
+# Test API key
+python << EOF
+import anthropic
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+message = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=10,
+    messages=[{"role": "user", "content": "Hello"}]
+)
+print("API Key OK:", message.content[0].text)
+EOF
+```
+
+### Issue: Permission denied
+
+```bash
+# Fix data directory permissions
+sudo chown -R $USER:$USER ~/mcc-amplify-ai/linux_server/data/
+sudo chown -R $USER:$USER ~/mcc-amplify-ai/linux_server/logs/
+chmod -R 755 ~/mcc-amplify-ai/linux_server/data/
+chmod -R 755 ~/mcc-amplify-ai/linux_server/logs/
+```
+
+---
+
+## Part 7: What to Show Your Supervisor (Now)
+
+### Demo Flow:
+
+1. **Upload PDF floor plan**
+   - Show web interface
+   - Upload sample plan
+
+2. **Watch AI processing**
+   - Real-time progress bar
+   - Each stage completes
+   - Takes 30-60 seconds
+
+3. **Show generated data:**
+   ```bash
+   # Show Revit transaction JSON
+   cat data/models/revit_transactions/LATEST_JOB_ID.json | less
+   
+   # Explain: "This JSON contains exact Revit API commands"
+   # Point out: walls, doors, windows with precise coordinates
+   ```
+
+4. **Explain what's working:**
+   - ✅ PDF analysis: Complete
+   - ✅ AI detection: Complete
+   - ✅ 3D geometry: Complete
+   - ✅ Revit instructions: Complete
+   - ⏳ RVT export: Waiting for Windows Revit
+
+5. **Show next steps:**
+   - "Once Windows Revit is installed..."
+   - "We just connect it and get native .RVT files"
+   - "No code changes needed"
+
+---
+
+## Part 8: Monitoring & Maintenance
+
+### Check System Health:
+
+```bash
+# Backend status
+sudo systemctl status floorplan-backend
+
+# Disk space
+df -h ~/mcc-amplify-ai/linux_server/data/
+
+# Memory usage
+free -h
+
+# Recent logs
+sudo journalctl -u floorplan-backend --since "10 minutes ago"
+```
+
+### Cleanup Old Files:
+
+```bash
+# Clean up old uploads (keep last 7 days)
+find ~/mcc-amplify-ai/linux_server/data/uploads/ -type f -mtime +7 -delete
+
+# Clean up old processed files
+find ~/mcc-amplify-ai/linux_server/data/processed/ -type f -mtime +7 -delete
+
+# Clean up old logs
+find ~/mcc-amplify-ai/linux_server/logs/ -type f -name "*.log" -mtime +30 -delete
+```
+
+### Backup Important Files:
+
+```bash
+# Create backup directory
+mkdir -p ~/backups
+
+# Backup .env file
+cp ~/mcc-amplify-ai/linux_server/.env ~/backups/.env.backup
+
+# Backup generated transaction JSONs
+tar -czf ~/backups/transactions-$(date +%Y%m%d).tar.gz \
+    ~/mcc-amplify-ai/linux_server/data/models/revit_transactions/
+```
+
+---
+
+## Part 9: When Windows Revit is Ready
+
+### What You'll Need to Do:
+
+1. **Install Revit 2023 on Windows machine**
+
+2. **Get Windows IP address:**
+   ```cmd
+   ipconfig
+   # Note the IPv4 Address
+   ```
+
+3. **Update Ubuntu .env:**
+   ```bash
+   nano ~/mcc-amplify-ai/linux_server/.env
+   
+   # Change this:
+   WINDOWS_REVIT_SERVER=http://192.168.1.100:5000  # Your Windows IP
+   REVIT_SERVER_API_KEY=your-secure-key
+   ```
+
+4. **Setup Windows service:**
+   - Follow Part 2 of original deployment guide
+   - Install Python service on Windows
+   - Start Revit API server
+
+5. **Test connection:**
+   ```bash
+   curl http://WINDOWS_IP:5000/health
+   ```
+
+6. **Restart backend:**
+   ```bash
+   sudo systemctl restart floorplan-backend
+   ```
+
+7. **Test full pipeline:**
+   - Upload PDF
+   - Should complete all stages including RVT export!
+
+---
+
+## ✅ Deployment Checklist (Ubuntu Only)
+
+- [ ] Ubuntu system updated
+- [ ] System dependencies installed (tesseract, poppler, opencv)
+- [ ] Miniconda installed
+- [ ] Repository cloned
+- [ ] Conda environment created
+- [ ] Backend dependencies installed
+- [ ] Frontend dependencies installed
+- [ ] Frontend built (`npm run build`)
+- [ ] .env file configured with Claude API key
+- [ ] Data directories created
+- [ ] Backend tested manually (`python app.py`)
+- [ ] Frontend tested manually (`npm run dev`)
+- [ ] Systemd service created (optional)
+- [ ] Nginx configured (optional)
+- [ ] Can upload PDF and see processing through Stage 6
+- [ ] Generated JSON files visible in data/models/revit_transactions/
+
+---
+
+## 📞 Getting Help
+
+**If something doesn't work:**
+
+1. **Check logs first:**
+   ```bash
+   tail -100 ~/mcc-amplify-ai/linux_server/logs/app.log
+   ```
+
+2. **Test individual components:**
+   ```bash
+   # Test Python environment
+   conda activate floorplan-ai
+   python -c "import sys; print(sys.executable)"
+   
+   # Test API key
+   python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('Key:', os.getenv('ANTHROPIC_API_KEY')[:20])"
+   ```
+
+3. **Restart everything:**
+   ```bash
+   sudo systemctl restart floorplan-backend
+   sudo systemctl restart nginx
+   ```
+
+4. **Check GitHub issues:**
+   - https://github.com/josephteh97/mcc-amplify-ai/issues
+
+---
+
+## 🎯 Summary
+
+**What you have now:**
+- ✅ Complete Ubuntu system
+- ✅ Stages 1-6 fully working
+- ✅ Can process PDFs and generate Revit instructions
+- ✅ Ready to demo to supervisor
+
+**What's pending:**
+- ⏳ Windows Revit server (when machine is ready)
+- ⏳ Stage 7: Native .RVT export
+
+**Time to complete:** ~1 hour for Ubuntu setup
+
+**You're ready to show your supervisor the AI processing capabilities!** 🚀
