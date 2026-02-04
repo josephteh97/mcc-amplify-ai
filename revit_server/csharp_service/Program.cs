@@ -75,7 +75,7 @@ namespace RevitService
             try
             {
                 Log.Information("Initializing Revit application...");
-                _revitApp = new Application();
+                // _revitApp = new Application();
                 Log.Information("✓ Revit application initialized successfully");
                 return true;
             }
