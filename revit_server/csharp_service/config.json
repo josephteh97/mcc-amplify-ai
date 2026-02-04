@@ -1,7 +1,7 @@
 {
   "revit_settings": {
-    "version": "2022",
-    "template_path": "C:\\ProgramData\\Autodesk\\RVT 2022\\Templates\\Architectural Template.rte",
+    "version": "2023",
+    "template_path": "C:\\ProgramData\\Autodesk\\RVT 2023\\Templates\\Architectural Template.rte",
     "output_directory": "C:\\RevitOutput",
     "temp_directory": "C:\\RevitTemp",
     "enable_headless": true,
