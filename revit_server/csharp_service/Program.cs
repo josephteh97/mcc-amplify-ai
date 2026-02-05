@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -86,54 +87,83 @@ namespace RevitService
             }
         }
 
+        // static async Task StartHttpServer()
+        // {
+        //   _listener = new HttpListener();
+        //   _listener.Prefixes.Clear();
+
+        //   // Use '*' to accept traffic from any IP/Subnet on this machine
+        //   _listener.Prefixes.Add("http://0.0.0.0:49152/"); 
+
+        //   try
+        // {
+        //         _listener.Start();
+        //         Log.Information("✓ HTTP Server started on http://0.0.0.0:49152/");
+        //         Log.Information("Ready to receive build requests!");
+        //         Log.Information("==============================================");
+
+        //         // Handle Ctrl+C gracefully
+        //         Console.CancelKeyPress += (sender, e) =>
+        //         {
+        //             e.Cancel = true;
+        //             _isRunning = false;
+        //             Log.Information("Shutdown requested...");
+        //         };
+
+        //         while (_isRunning)
+        //         {
+        //             var context = await _listener.GetContextAsync();
+        //             _ = Task.Run(() => HandleRequest(context));
+        //         }
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         Log.Error(ex, "Error in HTTP server");
+        //     }
+        //     finally
+        //     {
+        //         _listener?.Stop();
+        //         _listener?.Close();
+        //     }
+        // }
+
+
+
+
+
         static async Task StartHttpServer()
         {
-            _listener = new HttpListener();
-            // string url = $"http://{_config!.ApiSettings.Host}:{_config.ApiSettings.Port}/";
-            // _listener.Prefixes.Add(url);
-            
-            // 1. Clear any old settings. We hardcode the wildcard to match your Admin reservation
-            _listener.Prefixes.Clear();
+            // High-performance raw socket - bypasses http.sys entirely
+            Socket listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+    
+            try {
+                // Bind to ALL interfaces on port 49152
+                listener.Bind(new IPEndPoint(IPAddress.Any, 49152));
+                listener.Listen(100);
+        
+                Log.Information("🚀 NESTED SOCKET ACTIVE: Listening on Port 49152");
 
-            // 2. Define the URL for logging and the listener
-            // Note: Using 191 to match your actual Wi-Fi IP
-            string url = "http://191.168.124.64:5000/";
-            // _listener.Prefixes.Add("http://+:5000/"); 
-            // string url = "http://+:5000/"; // Update the string for the log message below
-            // This tells the server to listen on the specific network IP AND localhost
-            _listener.Prefixes.Add("http://127.0.0.1:5000/");
-            _listener.Prefixes.Add(url);
-
-            
-            try
-            {
-                _listener.Start();
-                Log.Information($"✓ HTTP Server started on {url}");
-                Log.Information("Ready to receive build requests!");
-                Log.Information("==============================================");
-
-                // Handle Ctrl+C gracefully
-                Console.CancelKeyPress += (sender, e) =>
-                {
-                    e.Cancel = true;
-                    _isRunning = false;
-                    Log.Information("Shutdown requested...");
-                };
-
-                while (_isRunning)
-                {
-                    var context = await _listener.GetContextAsync();
-                    _ = Task.Run(() => HandleRequest(context));
+                while (_isRunning) {
+                    Socket handler = await listener.AcceptAsync();
+                    _ = Task.Run(() => {
+                        byte[] buffer = new byte[1024];
+                        int received = handler.Receive(buffer);
+                
+                        // Construct a raw HTTP response string
+                        string response = "HTTP/1.1 200 OK\r\n" +
+                                  "Content-Type: application/json\r\n" +
+                                  "Access-Control-Allow-Origin: *\r\n" +
+                                  "Connection: close\r\n\r\n" +
+                                  "{\"status\":\"BLAST_SUCCESS\", \"message\":\"Revit Bridge Active\"}";
+                
+                        handler.Send(Encoding.UTF8.GetBytes(response));
+                        handler.Shutdown(SocketShutdown.Both);
+                        handler.Close();
+                    });
                 }
             }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error in HTTP server");
-            }
-            finally
-            {
-                _listener?.Stop();
-                _listener?.Close();
+            catch (Exception ex) {
+                Log.Fatal(ex, "THE DOOR IS TRULY BOLTED");
             }
         }
 
