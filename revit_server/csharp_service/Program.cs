@@ -89,8 +89,13 @@ namespace RevitService
         static async Task StartHttpServer()
         {
             _listener = new HttpListener();
-            string url = $"http://{_config!.ApiSettings.Host}:{_config.ApiSettings.Port}/";
-            _listener.Prefixes.Add(url);
+            // string url = $"http://{_config!.ApiSettings.Host}:{_config.ApiSettings.Port}/";
+            // _listener.Prefixes.Add(url);
+            
+            // We hardcode the wildcard to match your Admin reservation
+            _listener.Prefixes.Clear();
+            _listener.Prefixes.Add("http://+:5000/"); 
+            string url = "http://+:5000/"; // Update the string for the log message below
 
             try
             {
