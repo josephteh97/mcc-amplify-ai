@@ -92,13 +92,17 @@ namespace RevitService
             // string url = $"http://{_config!.ApiSettings.Host}:{_config.ApiSettings.Port}/";
             // _listener.Prefixes.Add(url);
             
-            // We hardcode the wildcard to match your Admin reservation
+            // 1. Clear any old settings. We hardcode the wildcard to match your Admin reservation
             _listener.Prefixes.Clear();
+
+            // 2. Define the URL for logging and the listener
+            // Note: Using 191 to match your actual Wi-Fi IP
+            string url = "http://191.168.124.64:5000/";
             // _listener.Prefixes.Add("http://+:5000/"); 
             // string url = "http://+:5000/"; // Update the string for the log message below
             // This tells the server to listen on the specific network IP AND localhost
             _listener.Prefixes.Add("http://127.0.0.1:5000/");
-            _listener.Prefixes.Add("http://192.168.124.64:5000/");
+            _listener.Prefixes.Add(url);
 
             
             try
