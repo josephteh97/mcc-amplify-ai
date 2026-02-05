@@ -133,32 +133,53 @@ namespace RevitService
 
         static async Task StartHttpServer()
         {
-            // High-performance raw socket - bypasses http.sys entirely
             Socket listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
     
             try {
-                // Bind to ALL interfaces on port 49152
                 listener.Bind(new IPEndPoint(IPAddress.Any, 49152));
                 listener.Listen(100);
-        
                 Log.Information("🚀 NESTED SOCKET ACTIVE: Listening on Port 49152");
 
                 while (_isRunning) {
                     Socket handler = await listener.AcceptAsync();
                     _ = Task.Run(() => {
-                        byte[] buffer = new byte[1024];
-                        int received = handler.Receive(buffer);
-                
-                        // Construct a raw HTTP response string
-                        string response = "HTTP/1.1 200 OK\r\n" +
-                                  "Content-Type: application/json\r\n" +
-                                  "Access-Control-Allow-Origin: *\r\n" +
-                                  "Connection: close\r\n\r\n" +
-                                  "{\"status\":\"BLAST_SUCCESS\", \"message\":\"Revit Bridge Active\"}";
-                
-                        handler.Send(Encoding.UTF8.GetBytes(response));
-                        handler.Shutdown(SocketShutdown.Both);
-                        handler.Close();
+                        try {
+                            byte[] buffer = new byte[2048]; // Increased buffer for POST data
+                            int received = handler.Receive(buffer);
+                            string request = Encoding.UTF8.GetString(buffer, 0, received);
+
+                            if (string.IsNullOrEmpty(request)) return;
+
+                            // Parse the Path (e.g., GET /health HTTP/1.1)
+                            string[] requestLines = request.Split('\n');
+                            string requestPath = requestLines[0].Split(' ')[1]; 
+
+                            string jsonBody;
+                            if (requestPath == "/health") {
+                                jsonBody = "{\"status\":\"HEALTHY\", \"message\":\"Revit Bridge Active\"}";
+                            } else {
+                                // RE-ENABLE YOUR LOGIC HERE
+                                // var result = ProcessRevitBuild(request); 
+                                jsonBody = "{\"status\":\"PROCESSING\", \"path\":\"" + requestPath + "\"}";
+                            }
+
+                            // CONSTRUCT FINAL RESPONSE
+                            // Note the double \r\n\r\n - THIS IS CRITICAL for HTTP
+                            string fullResponse = "HTTP/1.1 200 OK\r\n" +
+                                                  "Content-Type: application/json\r\n" +
+                                                  "Access-Control-Allow-Origin: *\r\n" +
+                                                  "Connection: close\r\n\r\n" + 
+                                                  jsonBody;
+
+                            handler.Send(Encoding.UTF8.GetBytes(fullResponse));
+                        }
+                        catch (Exception ex) {
+                            Log.Error($"Socket error: {ex.Message}");
+                        }
+                        finally {
+                            handler.Shutdown(SocketShutdown.Both);
+                            handler.Close();
+                        }
                     });
                 }
             }
