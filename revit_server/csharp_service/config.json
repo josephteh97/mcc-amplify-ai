@@ -11,7 +11,7 @@
   "api_settings": {
     "host": "0.0.0.0",
     "port": 5000,
-    "api_key": "change-this-to-secure-random-key",   
+    "api_key": "my-revit-key-2023",   
     "//": "must match REVIT_SERVER_API_KEY from .env file",
     "enable_https": false,
     "cors_origins": ["http://192.168.1.50:8000"],
