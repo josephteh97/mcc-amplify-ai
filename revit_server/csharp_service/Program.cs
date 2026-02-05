@@ -94,9 +94,13 @@ namespace RevitService
             
             // We hardcode the wildcard to match your Admin reservation
             _listener.Prefixes.Clear();
-            _listener.Prefixes.Add("http://+:5000/"); 
-            string url = "http://+:5000/"; // Update the string for the log message below
+            // _listener.Prefixes.Add("http://+:5000/"); 
+            // string url = "http://+:5000/"; // Update the string for the log message below
+            // This tells the server to listen on the specific network IP AND localhost
+            _listener.Prefixes.Add("http://127.0.0.1:5000/");
+            _listener.Prefixes.Add("http://192.168.124.64:5000/");
 
+            
             try
             {
                 _listener.Start();
