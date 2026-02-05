@@ -256,7 +256,8 @@ INFO:     Application startup complete.
 **Open another terminal and test:**
 ```bash
 # Test health endpoint
-curl http://localhost:8000/health
+curl -v http://LT-HQ-277:49152/health
+## curl http://localhost:8000/health
 
 # Should return:
 # {"status":"healthy","service":"Amplify Floor Plan AI","version":"1.0.0"}
@@ -580,6 +581,12 @@ chmod -R 755 ~/mcc-amplify-ai/linux_server/data/
 chmod -R 755 ~/mcc-amplify-ai/linux_server/logs/
 ```
 
+
+```bash
+echo "191.168.124.64 LT-HQ-277" | sudo tee -a /etc/hosts  ## tell Ubuntu the hostname and ip of the same PC
+
+curl -v http://LT-HQ-277:49152/health
+```
 ---
 
 ## Part 7: What to Show Your Supervisor (Now)
@@ -690,6 +697,11 @@ tar -czf ~/backups/transactions-$(date +%Y%m%d).tar.gz \
    - Follow Part 2 of original deployment guide
    - Install Python service on Windows
    - Start Revit API server
+   ```powershell
+   # Get window ready for handshake
+   cd C:\MyDocuments\mcc-amplify-ai\revit_server\csharp_service
+   dotnet run
+   ```
 
 5. **Test connection:**
    ```bash
