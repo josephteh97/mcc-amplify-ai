@@ -144,40 +144,48 @@ namespace RevitService
                     Socket handler = await listener.AcceptAsync();
                     _ = Task.Run(() => {
                         try {
-                            byte[] buffer = new byte[2048]; // Increased buffer for POST data
+                            byte[] buffer = new byte[8192]; // Larger buffer for incoming JSON
                             int received = handler.Receive(buffer);
                             string request = Encoding.UTF8.GetString(buffer, 0, received);
 
                             if (string.IsNullOrEmpty(request)) return;
 
-                            // Parse the Path (e.g., GET /health HTTP/1.1)
-                            string[] requestLines = request.Split('\n');
-                            string requestPath = requestLines[0].Split(' ')[1]; 
+                            // 1. Extract Path
+                            string requestLines = request.Split('\n')[0];
+                            string requestPath = requestLines.Split(' ')[1];
 
-                            string jsonBody;
-                            if (requestPath == "/health") {
-                                jsonBody = "{\"status\":\"HEALTHY\", \"message\":\"Revit Bridge Active\"}";
-                            } else {
-                                // RE-ENABLE YOUR LOGIC HERE
-                                // var result = ProcessRevitBuild(request); 
-                                jsonBody = "{\"status\":\"PROCESSING\", \"path\":\"" + requestPath + "\"}";
+                            // 2. Extract Body (everything after the double new-line)
+                            string requestBody = "";
+                            int bodyIndex = request.IndexOf("\r\n\r\n");
+                            if (bodyIndex != -1) {
+                                requestBody = request.Substring(bodyIndex + 4);
                             }
 
-                            // CONSTRUCT FINAL RESPONSE
-                            // Note the double \r\n\r\n - THIS IS CRITICAL for HTTP
-                            string fullResponse = "HTTP/1.1 200 OK\r\n" +
-                                                  "Content-Type: application/json\r\n" +
-                                                  "Access-Control-Allow-Origin: *\r\n" +
-                                                  "Connection: close\r\n\r\n" + 
-                                                  jsonBody;
+                            string jsonResponse;
+                            if (requestPath == "/health") {
+                                jsonResponse = "{\"status\":\"HEALTHY\"}";
+                            } else if (requestPath == "/build") {
+                                Log.Information($"Received Build Request: {requestBody}");
+                                // TODO: Pass 'requestBody' to your Revit API logic here
+                                jsonResponse = "{\"status\":\"QUEUED\", \"message\":\"Revit is processing...\"}";
+                            } else {
+                                jsonResponse = "{\"status\":\"NOT_FOUND\"}";
+                            }
 
-                            handler.Send(Encoding.UTF8.GetBytes(fullResponse));
+                            // 3. Send standardized Response
+                            string response = "HTTP/1.1 200 OK\r\n" +
+                                            "Content-Type: application/json\r\n" +
+                                            "Access-Control-Allow-Origin: *\r\n" +
+                                            "Connection: close\r\n\r\n" +
+                                            jsonResponse;
+
+                            handler.Send(Encoding.UTF8.GetBytes(response));
                         }
                         catch (Exception ex) {
                             Log.Error($"Socket error: {ex.Message}");
                         }
                         finally {
-                            handler.Shutdown(SocketShutdown.Both);
+                            if (handler.Connected) handler.Shutdown(SocketShutdown.Both);
                             handler.Close();
                         }
                     });
