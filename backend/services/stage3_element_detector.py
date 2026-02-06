@@ -42,11 +42,18 @@ class Stage3ElementDetector:
         # If no specialized models, or incomplete, check for monolithic model
         if not specialized_found:
             monolithic_path = self.weights_dir / "yolov8_floorplan.pt"
-            if monolithic_path.exists():
-                logger.info(f"Loading monolithic model: {monolithic_path}")
-                self.models['all'] = YOLO(str(monolithic_path))
-            else:
-                logger.warning("No custom weights found. Using base YOLOv8n (will need fine-tuning)")
+            # Try to load base YOLOv8n if custom model not found
+            # This is a fallback to ensure the system runs even without training
+            try:
+                if monolithic_path.exists():
+                    logger.info(f"Loading monolithic model: {monolithic_path}")
+                    self.models['all'] = YOLO(str(monolithic_path))
+                else:
+                    logger.warning("No custom weights found. Using base YOLOv8n (will need fine-tuning)")
+                    self.models['all'] = YOLO('yolov8n.pt')
+            except Exception as e:
+                logger.error(f"Failed to load YOLO model: {e}")
+                # Last resort fallback
                 self.models['all'] = YOLO('yolov8n.pt')
     
     async def detect(self, image_data: Dict, scale_info: Dict) -> Dict:
