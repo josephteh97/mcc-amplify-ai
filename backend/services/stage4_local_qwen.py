@@ -16,7 +16,9 @@ class Stage4LocalQwenAnalyzer:
     """Use local Qwen2.5-VL for semantic understanding and recipe generation"""
     
     def __init__(self):
-        self.model_path = "../models/Qwen2.5-VL-7B-Instruct"
+        # Default to Hugging Face Hub ID instead of local path if local path is invalid
+        # Use "Qwen/Qwen2.5-VL-7B-Instruct" for auto-download
+        self.model_path = os.getenv("Qwen_MODEL_PATH", "Qwen/Qwen2.5-VL-7B-Instruct")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         try:
