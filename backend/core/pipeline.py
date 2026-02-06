@@ -11,7 +11,7 @@ from loguru import logger
 from services.stage1_pdf_processor import Stage1PDFProcessor
 from services.stage2_scale_detector import Stage2ScaleDetector
 from services.stage3_element_detector import Stage3ElementDetector
-from services.stage4_semantic_analyzer import Stage4SemanticAnalyzer
+from services.stage4_local_qwen import Stage4LocalQwenAnalyzer
 from services.stage5_geometry_generator import Stage5GeometryGenerator
 from services.stage6_bim_enrichment import Stage6BIMEnrichment
 from services.stage7_exporters.rvt_exporter import RVTExporter
@@ -29,7 +29,7 @@ class FloorPlanPipeline:
         self.pdf_processor = Stage1PDFProcessor()
         self.scale_detector = Stage2ScaleDetector()
         self.element_detector = Stage3ElementDetector()
-        self.semantic_analyzer = Stage4SemanticAnalyzer()
+        self.semantic_analyzer = Stage4LocalQwenAnalyzer()
         self.geometry_generator = Stage5GeometryGenerator()
         self.bim_enrichment = Stage6BIMEnrichment()
         self.rvt_exporter = RVTExporter()
