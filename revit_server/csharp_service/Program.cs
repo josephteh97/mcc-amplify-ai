@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Serilog;
+using Autodesk.Revit.UI;
 using Autodesk.Revit.ApplicationServices;
 
 namespace RevitService
@@ -17,6 +18,10 @@ namespace RevitService
         private static Application? _revitApp;
         private static Config? _config;
         private static bool _isRunning = true;
+
+        // === Global wiring for ExternalEvent (MUST be static) ===
+        private static readonly RevitBuildHandler _handler = new RevitBuildHandler();
+        private static readonly ExternalEvent _externalEvent = ExternalEvent.Create(_handler);
 
         static async Task Main(string[] args)
         {
@@ -34,7 +39,7 @@ namespace RevitService
 
                 // Load configuration
                 _config = LoadConfiguration();
-                
+
                 // Initialize Revit
                 if (!InitializeRevit())
                 {
@@ -42,7 +47,7 @@ namespace RevitService
                     return;
                 }
 
-                // Start HTTP server
+                // Start the socket server
                 await StartHttpServer();
             }
             catch (Exception ex)
@@ -64,7 +69,6 @@ namespace RevitService
                 Log.Warning("config.json not found, using defaults");
                 return new Config();
             }
-
             string json = File.ReadAllText(configPath);
             var config = JsonConvert.DeserializeObject<Config>(json);
             Log.Information($"Configuration loaded from {configPath}");
@@ -76,8 +80,8 @@ namespace RevitService
             try
             {
                 Log.Information("Initializing Revit application...");
-                // _revitApp = new Application();
-                Log.Information("✓ Revit application initialized successfully");
+                // _revitApp = new Application();  // ← usually not needed in add-in/external context
+                Log.Information("✓ Revit application initialized successfully (assuming running inside Revit)");
                 return true;
             }
             catch (Exception ex)
@@ -87,392 +91,141 @@ namespace RevitService
             }
         }
 
-        // static async Task StartHttpServer()
-        // {
-        //   _listener = new HttpListener();
-        //   _listener.Prefixes.Clear();
-
-        //   // Use '*' to accept traffic from any IP/Subnet on this machine
-        //   _listener.Prefixes.Add("http://0.0.0.0:49152/"); 
-
-        //   try
-        // {
-        //         _listener.Start();
-        //         Log.Information("✓ HTTP Server started on http://0.0.0.0:49152/");
-        //         Log.Information("Ready to receive build requests!");
-        //         Log.Information("==============================================");
-
-        //         // Handle Ctrl+C gracefully
-        //         Console.CancelKeyPress += (sender, e) =>
-        //         {
-        //             e.Cancel = true;
-        //             _isRunning = false;
-        //             Log.Information("Shutdown requested...");
-        //         };
-
-        //         while (_isRunning)
-        //         {
-        //             var context = await _listener.GetContextAsync();
-        //             _ = Task.Run(() => HandleRequest(context));
-        //         }
-        //     }
-        //     catch (Exception ex)
-        //     {
-        //         Log.Error(ex, "Error in HTTP server");
-        //     }
-        //     finally
-        //     {
-        //         _listener?.Stop();
-        //         _listener?.Close();
-        //     }
-        // }
-
-
-
-
-
         static async Task StartHttpServer()
         {
             Socket listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-    
-            try {
-                listener.Bind(new IPEndPoint(IPAddress.Any, 49152));
-                listener.Listen(100);
-                Log.Information("🚀 NESTED SOCKET ACTIVE: Listening on Port 49152");
-
-                while (_isRunning) {
-                    Socket handler = await listener.AcceptAsync();
-                    _ = Task.Run(() => {
-                        try {
-                            byte[] buffer = new byte[8192]; // Larger buffer for incoming JSON
-                            int received = handler.Receive(buffer);
-                            string request = Encoding.UTF8.GetString(buffer, 0, received);
-
-                            if (string.IsNullOrEmpty(request)) return;
-
-                            // 1. Extract Path
-                            string requestLines = request.Split('\n')[0];
-                            string requestPath = requestLines.Split(' ')[1];
-
-                            // 2. Extract Body (everything after the double new-line)
-                            string requestBody = "";
-                            int bodyIndex = request.IndexOf("\r\n\r\n");
-                            if (bodyIndex != -1) {
-                                requestBody = request.Substring(bodyIndex + 4);
-                            }
-
-                            string jsonResponse;
-                            if (requestPath == "/health") {
-                                jsonResponse = "{\"status\":\"HEALTHY\"}";
-                            } else if (requestPath == "/build") {
-                                Log.Information($"Received Build Request: {requestBody}");
-                                // TODO: Pass 'requestBody' to your Revit API logic here
-                                jsonResponse = "{\"status\":\"QUEUED\", \"message\":\"Revit is processing...\"}";
-                            } else {
-                                jsonResponse = "{\"status\":\"NOT_FOUND\"}";
-                            }
-
-                            // 3. Send standardized Response
-                            string response = "HTTP/1.1 200 OK\r\n" +
-                                            "Content-Type: application/json\r\n" +
-                                            "Access-Control-Allow-Origin: *\r\n" +
-                                            "Connection: close\r\n\r\n" +
-                                            jsonResponse;
-
-                            handler.Send(Encoding.UTF8.GetBytes(response));
-                        }
-                        catch (Exception ex) {
-                            Log.Error($"Socket error: {ex.Message}");
-                        }
-                        finally {
-                            if (handler.Connected) handler.Shutdown(SocketShutdown.Both);
-                            handler.Close();
-                        }
-                    });
-                }
-            }
-            catch (Exception ex) {
-                Log.Fatal(ex, "THE DOOR IS TRULY BOLTED");
-            }
-        }
-
-        static async Task HandleRequest(HttpListenerContext context)
-        {
-            var request = context.Request;
-            var response = context.Response;
 
             try
             {
-                Log.Information($"Request: {request.HttpMethod} {request.Url?.AbsolutePath}");
+                listener.Bind(new IPEndPoint(IPAddress.Any, 49152));
+                listener.Listen(100);
+                Log.Information("🚀 SOCKET SERVER ACTIVE: Listening on port 49152");
 
-                // // Check API key
-                // string? apiKey = request.Headers["X-API-Key"];
-                // if (apiKey != _config!.ApiSettings.ApiKey)
-                // {
-                //     Log.Warning("Unauthorized request - invalid API key");
-                //     await SendResponse(response, 401, new { error = "Unauthorized" });
-                //     return;
-                // }
-                // Check API key (Hardcoded for testing)
-                string? apiKey = request.Headers["X-API-Key"];
-                if (apiKey != "my-revit-key-2023") 
+                while (_isRunning)
                 {
-                    Log.Warning($"Unauthorized request - received key: {apiKey ?? "NULL"}");
-                    await SendResponse(response, 401, new { error = "Unauthorized" });
-                    return;
-            }
-
-                // Route requests
-                string path = request.Url?.AbsolutePath ?? "";
-                
-                if (path == "/health" && request.HttpMethod == "GET")
-                {
-                    await HandleHealth(response);
+                    Socket handler = await listener.AcceptAsync();
+                    _ = Task.Run(() => ProcessClient(handler));
                 }
-                else if (path == "/build-model" && request.HttpMethod == "POST")
+            }
+            catch (Exception ex)
+            {
+                Log.Fatal(ex, "Socket listener failed");
+            }
+            finally
+            {
+                listener.Close();
+            }
+        }
+
+        private static void ProcessClient(Socket handler)
+        {
+            try
+            {
+                byte[] buffer = new byte[8192];
+                int received = handler.Receive(buffer);
+                if (received == 0) return;
+
+                string request = Encoding.UTF8.GetString(buffer, 0, received);
+
+                // Extract path (very basic parsing — improve if needed)
+                string requestLine = request.Split('\n')[0];
+                string requestPath = requestLine.Split(' ')[1].Trim();
+
+                // Extract body (after \r\n\r\n)
+                string requestBody = "";
+                int bodyStart = request.IndexOf("\r\n\r\n");
+                if (bodyStart != -1)
                 {
-                    await HandleBuildModel(request, response);
+                    requestBody = request.Substring(bodyStart + 4).Trim();
+                }
+
+                string jsonResponse;
+
+                if (requestPath == "/health")
+                {
+                    jsonResponse = "{\"status\":\"HEALTHY\"}";
+                }
+                else if (requestPath == "/build")
+                {
+                    Log.Information($"Received build request: {requestBody}");
+
+                    // 1. Pass data to handler (will be picked up in Execute)
+                    _handler.Data = requestBody;
+
+                    // 2. Raise the external event → Revit will call Execute() when idling
+                    _externalEvent.Raise();
+
+                    Log.Information("✅ ExternalEvent raised — Revit will process when idle");
+
+                    jsonResponse = "{\"status\":\"QUEUED\", \"message\":\"Build event sent to Revit\"}";
                 }
                 else
                 {
-                    await SendResponse(response, 404, new { error = "Not found" });
+                    jsonResponse = "{\"status\":\"NOT_FOUND\"}";
                 }
+
+                // Send response immediately (client doesn't wait for Revit)
+                string response = "HTTP/1.1 200 OK\r\n" +
+                                  "Content-Type: application/json\r\n" +
+                                  "Access-Control-Allow-Origin: *\r\n" +
+                                  "Connection: close\r\n\r\n" +
+                                  jsonResponse;
+
+                handler.Send(Encoding.UTF8.GetBytes(response));
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error handling request");
-                await SendResponse(response, 500, new { error = ex.Message });
+                Log.Error(ex, "Error processing client request");
+            }
+            finally
+            {
+                if (handler.Connected)
+                    handler.Shutdown(SocketShutdown.Both);
+                handler.Close();
             }
         }
+    }
 
-        static async Task HandleHealth(HttpListenerResponse response)
+    // Your existing RevitBuildHandler (runs on Revit's main thread)
+    public class RevitBuildHandler : IExternalEventHandler
+    {
+        public string Data { get; set; } = string.Empty;
+
+        public void Execute(UIApplication app)
         {
-            var health = new
-            {
-                status = "healthy",
-                service = "Revit API Service",
-                version = "1.0.0",
-                revit_initialized = true, // Hardcoded for testing
-                revit_version = "2023"     // Hardcoded for testing
-            };
-
-            await SendResponse(response, 200, health);
-        }
-
-        static async Task HandleBuildModel(HttpListenerRequest request, HttpListenerResponse response)
-        {
-            string requestBody;
-            using (var reader = new StreamReader(request.InputStream, request.ContentEncoding))
-            {
-                requestBody = await reader.ReadToEndAsync();
-            }
-
-            var buildRequest = JsonConvert.DeserializeObject<BuildRequest>(requestBody);
-            if (buildRequest == null)
-            {
-                await SendResponse(response, 400, new { error = "Invalid request" });
-                return;
-            }
-
-            Log.Information($"Building model for job: {buildRequest.JobId}");
-
             try
             {
-                // Parse transaction
-                var transaction = JsonConvert.DeserializeObject<RevitTransaction>(buildRequest.TransactionJson);
-                if (transaction == null)
+                if (string.IsNullOrWhiteSpace(Data))
                 {
-                    throw new Exception("Failed to parse transaction JSON");
+                    Log.Warning("RevitBuildHandler: No data received.");
+                    return;
                 }
 
-                // Build model
-                var builder = new ModelBuilder(_revitApp!, _config!);
-                string outputPath = Path.Combine(
-                    _config.RevitSettings.OutputDirectory,
-                    $"{buildRequest.JobId}.rvt"
-                );
+                Log.Information($"Revit processing build data: {Data}");
 
-                string resultPath = await builder.BuildModel(transaction, outputPath);
+                // TODO: Add your real Revit logic here
+                // Example:
+                // var transactionData = JsonConvert.DeserializeObject<RevitTransaction>(Data);
+                // using var tx = new Transaction(app.ActiveUIDocument.Document, "External Build");
+                // tx.Start();
+                // ... create walls, levels, etc ...
+                // tx.Commit();
 
-                // Return the RVT file
-                byte[] fileBytes = await File.ReadAllBytesAsync(resultPath);
-                
-                response.ContentType = "application/octet-stream";
-                response.ContentLength64 = fileBytes.Length;
-                response.AddHeader("Content-Disposition", $"attachment; filename={buildRequest.JobId}.rvt");
-                
-                await response.OutputStream.WriteAsync(fileBytes, 0, fileBytes.Length);
-                response.OutputStream.Close();
-
-                Log.Information($"✓ Model built successfully: {resultPath}");
+                // For testing / visibility:
+                // TaskDialog.Show("External Build", $"Received data:\n{Data}");
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to build model");
-                await SendResponse(response, 500, new { error = ex.Message });
+                Log.Error(ex, "RevitBuildHandler failed");
+                // TaskDialog.Show("Build Error", ex.Message);
             }
         }
 
-        static async Task SendResponse(HttpListenerResponse response, int statusCode, object data)
-        {
-            response.StatusCode = statusCode;
-            response.ContentType = "application/json";
-            
-            string json = JsonConvert.SerializeObject(data, Formatting.Indented);
-            byte[] buffer = Encoding.UTF8.GetBytes(json);
-            
-            response.ContentLength64 = buffer.Length;
-            await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
-            response.OutputStream.Close();
-        }
+        public string GetName() => "Revit Build External Event";
     }
 
-    // ========================================================================
-    // Configuration Classes
-    // ========================================================================
-
-    public class Config
-    {
-        public RevitSettings RevitSettings { get; set; } = new();
-        public ApiSettings ApiSettings { get; set; } = new();
-        public LoggingSettings LoggingSettings { get; set; } = new();
-    }
-
-    public class RevitSettings
-    {
-        public string Version { get; set; } = "2023";
-        public string TemplatePath { get; set; } = @"C:\ProgramData\Autodesk\RVT 2023\Templates\Architectural Template.rte";
-        public string OutputDirectory { get; set; } = @"C:\RevitOutput";
-        public bool EnableHeadless { get; set; } = true;
-    }
-
-    public class ApiSettings
-    {
-        public string Host { get; set; } = "0.0.0.0";
-        public int Port { get; set; } = 5000;
-        public string ApiKey { get; set; } = "change-this-key";
-        public int TimeoutSeconds { get; set; } = 300;
-    }
-
-    public class LoggingSettings
-    {
-        public string Level { get; set; } = "Information";
-        public string Directory { get; set; } = "logs";
-    }
-
-    // ========================================================================
-    // Request/Response Models
-    // ========================================================================
-
-    public class BuildRequest
-    {
-        public string JobId { get; set; } = "";
-        public string TransactionJson { get; set; } = "";
-    }
-
-    public class RevitTransaction
-    {
-        public string Version { get; set; } = "";
-        public string Template { get; set; } = "";
-        public ProjectInfo? ProjectInfo { get; set; }
-        public List<LevelCommand>? Levels { get; set; }
-        public List<WallCommand>? Walls { get; set; }
-        public List<DoorCommand>? Doors { get; set; }
-        public List<WindowCommand>? Windows { get; set; }
-        public List<FloorCommand>? Floors { get; set; }
-    }
-
-    public class ProjectInfo
-    {
-        public string Name { get; set; } = "";
-        public string Author { get; set; } = "";
-        public string CreatedDate { get; set; } = "";
-    }
-
-    public class LevelCommand
-    {
-        public string Name { get; set; } = "";
-        public double Elevation { get; set; }
-    }
-
-    public class WallCommand
-    {
-        public string Id { get; set; } = "";
-        public string Command { get; set; } = "";
-        public WallParameters? Parameters { get; set; }
-        public WallProperties? Properties { get; set; }
-    }
-
-    public class WallParameters
-    {
-        public CurveData? Curve { get; set; }
-        public string WallType { get; set; } = "";
-        public string Level { get; set; } = "";
-        public double Height { get; set; }
-        public bool Structural { get; set; }
-    }
-
-    public class WallProperties
-    {
-        public string Function { get; set; } = "";
-        public string Material { get; set; } = "";
-        public double Thickness { get; set; }
-    }
-
-    public class CurveData
-    {
-        public string Type { get; set; } = "";
-        public Point3D? Start { get; set; }
-        public Point3D? End { get; set; }
-    }
-
-    public class Point3D
-    {
-        public double X { get; set; }
-        public double Y { get; set; }
-        public double Z { get; set; }
-    }
-
-    public class DoorCommand
-    {
-        public string Id { get; set; } = "";
-        public DoorParameters? Parameters { get; set; }
-    }
-
-    public class DoorParameters
-    {
-        public string Family { get; set; } = "";
-        public string Symbol { get; set; } = "";
-        public Point3D? Location { get; set; }
-        public string HostWallId { get; set; } = "";
-        public string Level { get; set; } = "";
-    }
-
-    public class WindowCommand
-    {
-        public string Id { get; set; } = "";
-        public WindowParameters? Parameters { get; set; }
-    }
-
-    public class WindowParameters
-    {
-        public string Family { get; set; } = "";
-        public string Symbol { get; set; } = "";
-        public Point3D? Location { get; set; }
-        public string HostWallId { get; set; } = "";
-        public string Level { get; set; } = "";
-    }
-
-    public class FloorCommand
-    {
-        public string Id { get; set; } = "";
-        public FloorParameters? Parameters { get; set; }
-    }
-
-    public class FloorParameters
-    {
-        public List<List<double>>? Boundary { get; set; }
-        public string FloorType { get; set; } = "";
-        public string Level { get; set; } = "";
-    }
+    // ───────────────────────────────────────────────
+    // Keep all your other classes (Config, BuildRequest, RevitTransaction, etc.)
+    // ───────────────────────────────────────────────
+    // ... (paste your existing configuration and model classes here) ...
 }
