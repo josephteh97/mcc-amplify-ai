@@ -16,7 +16,7 @@ class Stage4LocalQwenAnalyzer:
     """Use local Qwen2.5-VL for semantic understanding and recipe generation"""
     
     def __init__(self):
-        self.model_path = "../model/Qwen2.5-VL-7B-Instruct"
+        self.model_path = "../models/Qwen2.5-VL-7B-Instruct"
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         try:
