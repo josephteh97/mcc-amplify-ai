@@ -5,6 +5,12 @@
 
 ## 🎯 Deployment Strategy
 
+We are using a Hybrid Distributed Architecture:
+
+    Linux (Ubuntu): Handles heavy lifting (OCR, Computer Vision, Claude AI, 3D Geometry generation).
+
+    Windows (Revit): Acts as the "Executive Arm" that receives instructions and builds native BIM models.
+
 Since Windows Revit is not ready yet, we'll deploy in phases:
 
 **Phase 1:** Ubuntu system (Stages 1-6) - **DO THIS NOW**
@@ -291,78 +297,61 @@ npm run dev
 
 ---
 
-## Part 2: Running the System (Without Windows Revit)
+## Part 2: Windows Revit Setup (The Builder)
 
-### Option A: Manual Run (Development/Testing)
+**This section describes how to deploy the C# Bridge we built.**
 
-**Terminal 1 - Backend:**
-```bash
-cd ~/mcc-amplify-ai/linux_server/backend
-conda activate floorplan-ai
-python app.py
-```
+### Step 1: Prerequisites
 
-**Terminal 2 - Frontend:**
-```bash
-cd ~/mcc-amplify-ai/linux_server/frontend
-npm run dev
-```
+    Windows 10/11 with Revit 2023 installed.
 
-**Access:** http://localhost:5173
+    .NET SDK 8.0 (for building) and .NET Framework 4.8 (for running).
 
-### Option B: Background Service (Production-like)
+### Step 2: Build the Revit Plugin
 
-Create systemd service for backend:
+    Verify output exists at: ...\bin\Debug\net48\RevitService.dll
 
-```bash
-# Create service file
-sudo nano /etc/systemd/system/floorplan-backend.service
-```
+### Step 3: Install the Add-in
 
-**Add this content** (replace `youruser` with your Ubuntu username):
+Copy the .addin manifest to the Revit discovery folder:
 
-```ini
-[Unit]
-Description=Floor Plan AI Backend
-After=network.target
+    Copy RevitService.addin to %AppData%\Autodesk\Revit\Addins\2023\
 
-[Service]
-Type=simple
-User=youruser
-WorkingDirectory=/home/youruser/mcc-amplify-ai/linux_server/backend
-Environment="PATH=/home/youruser/miniconda3/envs/floorplan-ai/bin"
-ExecStart=/home/youruser/miniconda3/envs/floorplan-ai/bin/python app.py
-Restart=always
-RestartSec=10
+    Ensure the <Assembly> path inside the file points to your net48\RevitService.dll.
 
-[Install]
-WantedBy=multi-user.target
-```
+### Step 4: Start the Service
 
-**Enable and start service:**
-```bash
-# Reload systemd
-sudo systemctl daemon-reload
+    Launch Revit 2023.
 
-# Enable service (start on boot)
-sudo systemctl enable floorplan-backend
+    Click "Always Load" on the security popup.
 
-# Start service
-sudo systemctl start floorplan-backend
+    Open any project file (The service requires an active document to process commands).
 
-# Check status
-sudo systemctl status floorplan-backend
+### Step 5: Connecting the Pipeline
 
-# View logs
-sudo journalctl -u floorplan-backend -f
-```
+    Update Ubuntu Configuration
 
-**For frontend** (production build already done):
-```bash
-# Frontend is already built in 'dist' folder
-# You can serve it with nginx (see Part 3)
-```
+    Edit ~/mcc-amplify-ai/linux_server/.env:
+    The Full Workflow Test
 
+    Ubuntu: curl -X POST http://localhost:8000/process -d @floorplan.pdf
+
+    Processing: System converts PDF → YOLO Detection → Claude Analysis → Revit JSON.
+
+    Execution: Ubuntu sends JSON to http://LT-HQ-277:49152/build.
+
+    Result: A native Revit wall appears automatically in the Windows Revit instance.
+
+📋 Status Dashboard (Phase 1)
+📞 Troubleshooting Handshake Issues
+
+If Ubuntu cannot see Revit:
+
+    Check Port: Run Test-NetConnection -ComputerName localhost -Port 49152 on Windows.
+
+    Firewall: Ensure Windows Firewall allows Inbound TCP Traffic on Port 49152.
+
+    Revit State: Ensure Revit is not in a "Modal" state (like having an Options window or Print dialog open), as this blocks the API.
 ---
 
 ## Part 3: Setup Nginx (Optional but Recommended)
