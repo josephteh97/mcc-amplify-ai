@@ -1,9 +1,8 @@
 @echo off
 echo Starting Amplify AI Backend...
 
-cd ..\backend
+cd /d "%~dp0..\backend"
 call venv\Scripts\activate
 
 echo Starting FastAPI Server...
-cd C:\MyDocuments\mcc-amplify-ai\revit_server\csharp_service
-dotnet build
+python app.py

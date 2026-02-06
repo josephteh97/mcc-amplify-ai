@@ -1,7 +1,7 @@
 @echo off
 echo Setting up Amplify AI Environment...
 
-cd ..\backend
+cd /d "%~dp0..\backend"
 if exist venv (
     echo Virtual environment found.
 ) else (
