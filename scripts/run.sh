@@ -11,4 +11,4 @@ if [ -d "venv" ]; then
 fi
 
 # Run the app
-python app.py
+python backend/app.py
