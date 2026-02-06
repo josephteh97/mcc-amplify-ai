@@ -6,6 +6,7 @@ using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
 using Serilog;
+using Newtonsoft.Json.Linq;
 
 namespace RevitService
 {
@@ -14,45 +15,38 @@ namespace RevitService
         private readonly Application _app;
         private readonly Config _config;
         private Document? _doc;
+        private readonly CommandProcessor _commandProcessor;
+        private const double MM_TO_FEET = 1.0 / 304.8;
 
         public ModelBuilder(Application app, Config config)
         {
             _app = app;
             _config = config;
+            _commandProcessor = new CommandProcessor();
         }
 
-        public async Task<string> BuildModel(RevitTransaction transaction, string outputPath)
+        public Document? Doc => _doc;
+
+        public async Task<string> BuildModel(RevitRecipe recipe, string outputPath)
         {
             return await Task.Run(() =>
             {
                 try
                 {
-                    // Create new document
                     Log.Information("Creating new Revit document...");
                     _doc = _app.NewProjectDocument(_config.RevitSettings.TemplatePath);
                     
-                    // Start transaction
-                    using (Transaction trans = new Transaction(_doc, "Build Floor Plan Model"))
+                    using (Transaction trans = new Transaction(_doc, "Build Model via Recipe"))
                     {
                         trans.Start();
-
                         try
                         {
-                            // Build model components
-                            if (transaction.Levels != null)
-                                CreateLevels(transaction.Levels);
-                            
-                            if (transaction.Walls != null)
-                                CreateWalls(transaction.Walls);
-                            
-                            if (transaction.Doors != null)
-                                CreateDoors(transaction.Doors);
-                            
-                            if (transaction.Windows != null)
-                                CreateWindows(transaction.Windows);
-                            
-                            if (transaction.Floors != null)
-                                CreateFloors(transaction.Floors);
+                            foreach (var step in recipe.Steps)
+                            {
+                                Log.Information($"Executing command: {step.CommandType}");
+                                IRevitCommand command = _commandProcessor.CreateCommand(step.CommandType, step.Parameters);
+                                command?.Execute(this);
+                            }
 
                             trans.Commit();
                             Log.Information("✓ Transaction committed successfully");
@@ -65,15 +59,9 @@ namespace RevitService
                         }
                     }
 
-                    // Save document
                     Log.Information($"Saving document to: {outputPath}");
-                    SaveAsOptions saveOptions = new SaveAsOptions
-                    {
-                        OverwriteExistingFile = true
-                    };
+                    SaveAsOptions saveOptions = new SaveAsOptions { OverwriteExistingFile = true };
                     _doc.SaveAs(outputPath, saveOptions);
-
-                    // Close document
                     _doc.Close(false);
                     _doc = null;
 
@@ -92,99 +80,159 @@ namespace RevitService
                 }
             });
         }
-
-        private void CreateLevels(List<LevelCommand> levels)
+        
+        public string RenderModel(string rvtPath, string outputDir)
         {
-            Log.Information($"Creating {levels.Count} levels...");
-            // Level creation logic here
+             try
+             {
+                 Log.Information($"Opening model for rendering: {rvtPath}");
+                 _doc = _app.OpenDocumentFile(rvtPath);
+                 
+                 // Find 3D View
+                 View3D view3d = new FilteredElementCollector(_doc)
+                     .OfClass(typeof(View3D))
+                     .Cast<View3D>()
+                     .FirstOrDefault(v => v.Name == "{3D}" || v.ViewType == ViewType.ThreeD);
+
+                 if (view3d == null)
+                     throw new Exception("No 3D view found in model");
+
+                 string outputPath = System.IO.Path.Combine(outputDir, "render.png");
+                 
+                 ImageExportOptions options = new ImageExportOptions
+                 {
+                     ZoomType = ZoomFitType.FitToPage,
+                     PixelSize = 1920,
+                     FilePath = outputPath,
+                     FitDirection = FitDirectionType.Horizontal,
+                     HLRandWFViewsFileType = ImageFileType.PNG,
+                     ShadowViewsFileType = ImageFileType.PNG,
+                     ImageResolution = ImageResolution.DPI_300,
+                     ExportRange = ExportRange.SetOfViews,
+                 };
+                 options.SetViewsAndSheets(new List<ElementId> { view3d.Id });
+
+                 _doc.ExportImage(options);
+                 _doc.Close(false);
+                 _doc = null;
+                 
+                 Log.Information($"Render saved to: {outputPath}");
+                 return outputPath;
+             }
+             catch (Exception ex)
+             {
+                 Log.Error(ex, "Failed to render model");
+                 if (_doc != null) { _doc.Close(false); _doc = null; }
+                 throw;
+             }
         }
 
-        private void CreateWalls(List<WallCommand> walls)
+        // ========================================================================
+        // Helper Methods for Commands
+        // ========================================================================
+
+        public void CreateWall(WallCreateData data)
         {
-            Log.Information($"Creating {walls.Count} walls...");
-            
-            foreach (var wallCmd in walls)
+            XYZ start = new XYZ(data.Start.X * MM_TO_FEET, data.Start.Y * MM_TO_FEET, 0);
+            XYZ end = new XYZ(data.End.X * MM_TO_FEET, data.End.Y * MM_TO_FEET, 0);
+            Line line = Line.CreateBound(start, end);
+
+            WallType wallType = GetElementByName<WallType>(data.WallType);
+            Level level = GetElementByName<Level>(data.Level);
+
+            if (wallType != null && level != null)
             {
-                try
-                {
-                    if (wallCmd.Parameters?.Curve == null) continue;
-
-                    // Get wall type
-                    WallType? wallType = GetWallType(wallCmd.Parameters.WallType);
-                    if (wallType == null) continue;
-
-                    // Get level
-                    Level? level = GetLevel(wallCmd.Parameters.Level);
-                    if (level == null) continue;
-
-                    // Create curve
-                    XYZ start = new XYZ(
-                        wallCmd.Parameters.Curve.Start!.X / 304.8, // mm to feet
-                        wallCmd.Parameters.Curve.Start.Y / 304.8,
-                        wallCmd.Parameters.Curve.Start.Z / 304.8
-                    );
-
-                    XYZ end = new XYZ(
-                        wallCmd.Parameters.Curve.End!.X / 304.8,
-                        wallCmd.Parameters.Curve.End.Y / 304.8,
-                        wallCmd.Parameters.Curve.End.Z / 304.8
-                    );
-
-                    Line line = Line.CreateBound(start, end);
-
-                    // Create wall
-                    Wall.Create(
-                        _doc!,
-                        line,
-                        wallType.Id,
-                        level.Id,
-                        wallCmd.Parameters.Height / 304.8, // mm to feet
-                        0,
-                        false,
-                        wallCmd.Parameters.Structural
-                    );
-                }
-                catch (Exception ex)
-                {
-                    Log.Warning(ex, $"Failed to create wall: {wallCmd.Id}");
-                }
+                Wall.Create(_doc, line, wallType.Id, level.Id, data.Height * MM_TO_FEET, 0, false, data.Structural);
             }
         }
 
-        private void CreateDoors(List<DoorCommand> doors)
+        public void CreateDoor(DoorCreateData data)
         {
-            Log.Information($"Creating {doors.Count} doors...");
-            // Door creation logic
+            FamilySymbol symbol = GetFamilySymbol(data.Family, data.Symbol);
+            if (symbol == null) return;
+            if (!symbol.IsActive) symbol.Activate();
+
+            Wall hostWall = _doc.GetElement(new ElementId(int.Parse(data.HostWallId))) as Wall;
+            Level level = GetElementByName<Level>(data.Level);
+            XYZ location = new XYZ(data.Location.X * MM_TO_FEET, data.Location.Y * MM_TO_FEET, 0);
+
+            if (hostWall != null && level != null)
+            {
+                _doc.Create.NewFamilyInstance(location, symbol, hostWall, level, StructuralType.NonStructural);
+            }
         }
 
-        private void CreateWindows(List<WindowCommand> windows)
+        public void CreateColumn(ColumnCreateData data)
         {
-            Log.Information($"Creating {windows.Count} windows...");
-            // Window creation logic
+             FamilySymbol symbol = GetFamilySymbol(data.Family, data.Symbol);
+             if (symbol == null) return;
+             if (!symbol.IsActive) symbol.Activate();
+             
+             Level level = GetElementByName<Level>(data.Level);
+             XYZ location = new XYZ(data.Location.X * MM_TO_FEET, data.Location.Y * MM_TO_FEET, 0);
+             
+             if (level != null)
+             {
+                 _doc.Create.NewFamilyInstance(location, symbol, level, StructuralType.Column);
+             }
         }
 
-        private void CreateFloors(List<FloorCommand> floors)
+        private T GetElementByName<T>(string name) where T : Element
         {
-            Log.Information($"Creating {floors.Count} floors...");
-            // Floor creation logic
+            return new FilteredElementCollector(_doc)
+                .OfClass(typeof(T))
+                .Cast<T>()
+                .FirstOrDefault(e => e.Name == name);
         }
 
-        private WallType? GetWallType(string typeName)
+        private FamilySymbol GetFamilySymbol(string familyName, string symbolName)
         {
-            FilteredElementCollector collector = new FilteredElementCollector(_doc!);
-            return collector.OfClass(typeof(WallType))
-                .Cast<WallType>()
-                .FirstOrDefault(wt => wt.Name == typeName);
-        }
-
-        private Level? GetLevel(string levelName)
-        {
-            FilteredElementCollector collector = new FilteredElementCollector(_doc!);
-            return collector.OfClass(typeof(Level))
-                .Cast<Level>()
-                .FirstOrDefault(l => l.Name == levelName);
+            return new FilteredElementCollector(_doc)
+                .OfClass(typeof(FamilySymbol))
+                .Cast<FamilySymbol>()
+                .FirstOrDefault(x => x.FamilyName == familyName && x.Name == symbolName);
         }
     }
-}
 
-// if the Revit is already using mm, do we need to convert?
+    // ========================================================================
+    // Command Processor & Concrete Commands
+    // ========================================================================
+
+    public class CommandProcessor
+    {
+        public IRevitCommand CreateCommand(string type, JObject parameters)
+        {
+            return type switch
+            {
+                "Wall.Create" => new CreateWallCommand(parameters.ToObject<WallCreateData>()),
+                "Door.Create" => new CreateDoorCommand(parameters.ToObject<DoorCreateData>()),
+                "Column.Create" => new CreateColumnCommand(parameters.ToObject<ColumnCreateData>()),
+                _ => null
+            };
+        }
+    }
+
+    public class CreateWallCommand : IRevitCommand
+    {
+        private readonly WallCreateData _data;
+        public string Type => "Wall.Create";
+        public CreateWallCommand(WallCreateData data) { _data = data; }
+        public void Execute(ModelBuilder builder) { builder.CreateWall(_data); }
+    }
+
+    public class CreateDoorCommand : IRevitCommand
+    {
+        private readonly DoorCreateData _data;
+        public string Type => "Door.Create";
+        public CreateDoorCommand(DoorCreateData data) { _data = data; }
+        public void Execute(ModelBuilder builder) { builder.CreateDoor(_data); }
+    }
+    
+    public class CreateColumnCommand : IRevitCommand
+    {
+        private readonly ColumnCreateData _data;
+        public string Type => "Column.Create";
+        public CreateColumnCommand(ColumnCreateData data) { _data = data; }
+        public void Execute(ModelBuilder builder) { builder.CreateColumn(_data); }
+    }
+}

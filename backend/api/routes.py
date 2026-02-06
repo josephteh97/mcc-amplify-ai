@@ -12,6 +12,7 @@ from loguru import logger
 
 from core.pipeline import FloorPlanPipeline
 from utils.file_handler import save_upload_file
+from services.revit_client import RevitClient
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ router = APIRouter()
 job_status = {}
 
 pipeline = FloorPlanPipeline()
+revit_client = RevitClient()
 
 
 class ProcessRequest(BaseModel):
@@ -173,6 +175,74 @@ async def download_gltf(job_id: str):
         media_type="model/gltf-binary",
         filename=f"{job_id}.glb"
     )
+
+# ========================================================================
+# New Endpoints for RVT Upload & Rendering
+# ========================================================================
+
+@router.post("/upload-rvt")
+async def upload_rvt(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None
+):
+    """
+    Upload existing RVT file for rendering
+    """
+    if not file.filename.lower().endswith('.rvt'):
+        raise HTTPException(400, "Only .rvt files are supported")
+        
+    job_id = str(uuid.uuid4())
+    file_path = await save_upload_file(file, job_id)
+    
+    job_status[job_id] = {
+        "status": "uploaded_rvt",
+        "progress": 0,
+        "message": "RVT uploaded, waiting for rendering",
+        "filename": file.filename,
+        "file_path": str(file_path)
+    }
+    
+    # Trigger rendering automatically
+    background_tasks.add_task(run_rvt_render, job_id, str(file_path))
+    
+    return {"job_id": job_id, "message": "RVT uploaded and rendering started"}
+
+async def run_rvt_render(job_id: str, rvt_path: str):
+    """Background task to render uploaded RVT"""
+    try:
+        job_status[job_id]["status"] = "rendering"
+        job_status[job_id]["progress"] = 10
+        
+        # Call Revit Server to render
+        render_path = await revit_client.render_model(rvt_path, job_id)
+        
+        job_status[job_id].update({
+            "status": "completed",
+            "progress": 100,
+            "result": {
+                "files": {
+                    "render": render_path,
+                    "rvt": rvt_path
+                }
+            }
+        })
+    except Exception as e:
+        logger.error(f"Rendering failed for {job_id}: {e}")
+        job_status[job_id].update({
+            "status": "failed",
+            "error": str(e)
+        })
+
+@router.get("/download/render/{job_id}")
+async def download_render(job_id: str):
+    """Download rendered image"""
+    if job_id not in job_status: raise HTTPException(404, "Job not found")
+    
+    render_path = job_status[job_id].get("result", {}).get("files", {}).get("render")
+    if not render_path or not Path(render_path).exists():
+        raise HTTPException(404, "Render not found")
+        
+    return FileResponse(render_path, media_type="image/png")
 
 
 @router.get("/health")

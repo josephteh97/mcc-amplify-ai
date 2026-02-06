@@ -506,6 +506,10 @@ deployment/
 !environment.yml
 !package.json
 
+# Keep .trae plan files
+!.trae
+.trae/*
+
 # ============================================
 # NOTES
 # ============================================

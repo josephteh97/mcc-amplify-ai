@@ -1,7 +1,92 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace RevitService
 {
+    // ========================================================================
+    // Command Pattern Architecture
+    // ========================================================================
+
+    public interface IRevitCommand
+    {
+        string Type { get; }
+        void Execute(ModelBuilder builder);
+    }
+
+    public class RevitRecipe
+    {
+        public string Version { get; set; } = "1.0";
+        public ProjectInfo ProjectInfo { get; set; } = new();
+        public List<RecipeStep> Steps { get; set; } = new();
+    }
+
+    public class RecipeStep
+    {
+        public string CommandType { get; set; } = ""; // e.g., "Wall.Create", "Door.Create"
+        public JObject Parameters { get; set; } = new(); // Dynamic parameters
+    }
+
+    // ========================================================================
+    // Concrete Command Data Models (for Deserialization)
+    // ========================================================================
+
+    public class WallCreateData
+    {
+        public Point3D Start { get; set; }
+        public Point3D End { get; set; }
+        public string WallType { get; set; } = "Generic - 200mm";
+        public string Level { get; set; } = "Level 1";
+        public double Height { get; set; } = 3000;
+        public bool Structural { get; set; } = false;
+    }
+
+    public class DoorCreateData
+    {
+        public Point3D Location { get; set; }
+        public string Family { get; set; } = "M_Single-Flush";
+        public string Symbol { get; set; } = "0915 x 2134mm";
+        public string HostWallId { get; set; } // Can be index or ID
+        public string Level { get; set; } = "Level 1";
+    }
+    
+    public class WindowCreateData
+    {
+        public Point3D Location { get; set; }
+        public string Family { get; set; } = "M_Fixed";
+        public string Symbol { get; set; } = "0406 x 0610mm";
+        public string HostWallId { get; set; }
+        public string Level { get; set; } = "Level 1";
+    }
+    
+    public class ColumnCreateData
+    {
+        public Point3D Location { get; set; }
+        public string Family { get; set; } = "M_Rectangular Column";
+        public string Symbol { get; set; } = "457 x 457mm";
+        public string Level { get; set; } = "Level 1";
+        public double Height { get; set; } = 3000;
+    }
+
+    public class FloorCreateData
+    {
+        public List<Point3D> Boundary { get; set; } = new();
+        public string FloorType { get; set; } = "Generic - 150mm";
+        public string Level { get; set; } = "Level 1";
+    }
+
+    public class RenderModelData
+    {
+        public string ViewName { get; set; } = "3D View";
+        public string OutputFormat { get; set; } = "png"; // png, jpg, gltf
+        public int Width { get; set; } = 1920;
+        public int Height { get; set; } = 1080;
+    }
+
+    // ========================================================================
+    // Existing Models (Kept for compatibility or reused)
+    // ========================================================================
+
     public class Config
     {
         public RevitSettings RevitSettings { get; set; } = new();
@@ -31,26 +116,16 @@ namespace RevitService
         public string Directory { get; set; } = "logs";
     }
 
-    // ========================================================================
-    // Request/Response Models
-    // ========================================================================
-
     public class BuildRequest
     {
         public string JobId { get; set; } = "";
         public string TransactionJson { get; set; } = "";
     }
-
-    public class RevitTransaction
+    
+    public class RenderRequest
     {
-        public string Version { get; set; } = "";
-        public string Template { get; set; } = "";
-        public ProjectInfo? ProjectInfo { get; set; }
-        public List<LevelCommand>? Levels { get; set; }
-        public List<WallCommand>? Walls { get; set; }
-        public List<DoorCommand>? Doors { get; set; }
-        public List<WindowCommand>? Windows { get; set; }
-        public List<FloorCommand>? Floors { get; set; }
+        public string JobId { get; set; }
+        public string RvtFilePath { get; set; }
     }
 
     public class ProjectInfo
@@ -60,90 +135,10 @@ namespace RevitService
         public string CreatedDate { get; set; } = "";
     }
 
-    public class LevelCommand
-    {
-        public string Name { get; set; } = "";
-        public double Elevation { get; set; }
-    }
-
-    public class WallCommand
-    {
-        public string Id { get; set; } = "";
-        public string Command { get; set; } = "";
-        public WallParameters? Parameters { get; set; }
-        public WallProperties? Properties { get; set; }
-    }
-
-    public class WallParameters
-    {
-        public CurveData? Curve { get; set; }
-        public string WallType { get; set; } = "";
-        public string Level { get; set; } = "";
-        public double Height { get; set; }
-        public bool Structural { get; set; }
-    }
-
-    public class WallProperties
-    {
-        public string Function { get; set; } = "";
-        public string Material { get; set; } = "";
-        public double Thickness { get; set; }
-    }
-
-    public class CurveData
-    {
-        public string Type { get; set; } = "";
-        public Point3D? Start { get; set; }
-        public Point3D? End { get; set; }
-    }
-
     public class Point3D
     {
         public double X { get; set; }
         public double Y { get; set; }
         public double Z { get; set; }
-    }
-
-    public class DoorCommand
-    {
-        public string Id { get; set; } = "";
-        public DoorParameters? Parameters { get; set; }
-    }
-
-    public class DoorParameters
-    {
-        public string Family { get; set; } = "";
-        public string Symbol { get; set; } = "";
-        public Point3D? Location { get; set; }
-        public string HostWallId { get; set; } = "";
-        public string Level { get; set; } = "";
-    }
-
-    public class WindowCommand
-    {
-        public string Id { get; set; } = "";
-        public WindowParameters? Parameters { get; set; }
-    }
-
-    public class WindowParameters
-    {
-        public string Family { get; set; } = "";
-        public string Symbol { get; set; } = "";
-        public Point3D? Location { get; set; }
-        public string HostWallId { get; set; } = "";
-        public string Level { get; set; } = "";
-    }
-
-    public class FloorCommand
-    {
-        public string Id { get; set; } = "";
-        public FloorParameters? Parameters { get; set; }
-    }
-
-    public class FloorParameters
-    {
-        public List<List<double>>? Boundary { get; set; }
-        public string FloorType { get; set; } = "";
-        public string Level { get; set; } = "";
     }
 }

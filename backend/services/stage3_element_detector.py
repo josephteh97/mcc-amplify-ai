@@ -1,92 +1,83 @@
 """
 Stage 3: AI Element Detection
 Uses YOLOv8 to detect walls, doors, windows, etc.
+Supports dynamic model loading (single .pt vs specialized)
 """
 
 from ultralytics import YOLO
 import cv2
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pathlib import Path
 from loguru import logger
 import os
 
 
 class Stage3ElementDetector:
-    """Detect architectural elements using YOLOv8"""
+    """Detect architectural elements using YOLOv8 with dynamic model support"""
     
     def __init__(self):
-        weights_path = os.getenv(
-            "YOLO_WEIGHTS_PATH",
-            "ml_models/weights/yolov8_floorplan.pt"
-        )
-        
-        # Load YOLO model
-        if Path(weights_path).exists():
-            self.model = YOLO(weights_path)
-            logger.info(f"Loaded custom YOLO model from {weights_path}")
-        else:
-            # Use pre-trained model (will need fine-tuning)
-            self.model = YOLO('yolov8n.pt')
-            logger.warning("Using base YOLOv8 model - consider training custom model")
-        
+        self.weights_dir = Path(os.getenv("YOLO_WEIGHTS_DIR", "ml_models/weights"))
         self.confidence = float(os.getenv("DETECTION_CONFIDENCE", 0.6))
         self.nms_threshold = float(os.getenv("NMS_THRESHOLD", 0.4))
+        
+        # Initialize models map
+        self.models = {}
+        self._load_models()
+    
+    def _load_models(self):
+        """Load available YOLO models dynamically"""
+        
+        # Check for specialized models first
+        specialized_found = False
+        specialized_types = ['wall', 'door', 'window', 'column']
+        
+        for e_type in specialized_types:
+            weight_path = self.weights_dir / f"{e_type}.pt"
+            if weight_path.exists():
+                logger.info(f"Loading specialized model for {e_type}: {weight_path}")
+                self.models[e_type] = YOLO(str(weight_path))
+                specialized_found = True
+        
+        # If no specialized models, or incomplete, check for monolithic model
+        if not specialized_found:
+            monolithic_path = self.weights_dir / "yolov8_floorplan.pt"
+            if monolithic_path.exists():
+                logger.info(f"Loading monolithic model: {monolithic_path}")
+                self.models['all'] = YOLO(str(monolithic_path))
+            else:
+                logger.warning("No custom weights found. Using base YOLOv8n (will need fine-tuning)")
+                self.models['all'] = YOLO('yolov8n.pt')
     
     async def detect(self, image_data: Dict, scale_info: Dict) -> Dict:
         """
         Detect architectural elements
-        
-        Args:
-            image_data: Preprocessed image
-            scale_info: Scale calibration data
-            
-        Returns:
-            Dict with detected elements
         """
         image = image_data["image"]
         pixels_per_mm = scale_info["pixels_per_mm"]
         
-        # Run YOLO detection
-        results = self.model.predict(
-            image,
-            conf=self.confidence,
-            iou=self.nms_threshold,
-            verbose=False
-        )
-        
-        # Parse results
         elements = {
-            "walls": [],
-            "doors": [],
-            "windows": [],
-            "stairs": [],
-            "rooms": [],
-            "fixtures": [],
-            "columns": []
+            "walls": [], "doors": [], "windows": [], 
+            "stairs": [], "rooms": [], "fixtures": [], "columns": []
         }
         
-        for result in results:
-            boxes = result.boxes
-            
-            for i, box in enumerate(boxes):
-                class_id = int(box.cls[0])
-                confidence = float(box.conf[0])
-                bbox = box.xyxy[0].cpu().numpy()
-                
-                # Map class ID to element type
-                element_type = self._map_class_to_type(class_id)
-                
-                if element_type:
-                    element = await self._parse_element(
-                        element_type,
-                        bbox,
-                        confidence,
-                        image,
-                        pixels_per_mm
-                    )
-                    
-                    elements[element_type + "s"].append(element)
+        # Run detection
+        if 'all' in self.models:
+            # Monolithic detection
+            results = self.models['all'].predict(
+                image, conf=self.confidence, iou=self.nms_threshold, verbose=False
+            )
+            await self._process_results(results, elements, image, pixels_per_mm)
+        else:
+            # Specialized detection
+            for e_type, model in self.models.items():
+                logger.info(f"Running detection for {e_type}...")
+                results = model.predict(
+                    image, conf=self.confidence, iou=self.nms_threshold, verbose=False
+                )
+                # Note: Specialized models usually output class 0 for their specific type
+                # We need to map that correctly
+                await self._process_results(results, elements, image, pixels_per_mm, override_type=e_type)
         
         # Post-processing
         elements = await self._post_process(elements, image, pixels_per_mm)
@@ -97,18 +88,41 @@ class Stage3ElementDetector:
         
         return elements
     
+    async def _process_results(
+        self, 
+        results, 
+        elements_dict: Dict, 
+        image: np.ndarray, 
+        pixels_per_mm: float,
+        override_type: str = None
+    ):
+        """Process YOLO results and populate elements dict"""
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                confidence = float(box.conf[0])
+                bbox = box.xyxy[0].cpu().numpy()
+                
+                if override_type:
+                    element_type = override_type
+                else:
+                    class_id = int(box.cls[0])
+                    element_type = self._map_class_to_type(class_id)
+                
+                if element_type:
+                    element = await self._parse_element(
+                        element_type, bbox, confidence, image, pixels_per_mm
+                    )
+                    # Append to correct list (pluralized key)
+                    key = element_type + "s"
+                    if key in elements_dict:
+                        elements_dict[key].append(element)
+
     def _map_class_to_type(self, class_id: int) -> Optional[str]:
         """Map YOLO class ID to element type"""
-        # This mapping depends on your trained model
-        # Example mapping:
         mapping = {
-            0: "wall",
-            1: "door",
-            2: "window",
-            3: "stair",
-            4: "room",
-            5: "fixture",
-            6: "column"
+            0: "wall", 1: "door", 2: "window", 
+            3: "stair", 4: "room", 5: "fixture", 6: "column"
         }
         return mapping.get(class_id)
     
@@ -123,8 +137,6 @@ class Stage3ElementDetector:
         """Parse detected element into structured data"""
         
         x1, y1, x2, y2 = bbox
-        
-        # Calculate real-world dimensions
         width_px = x2 - x1
         height_px = y2 - y1
         
@@ -160,24 +172,19 @@ class Stage3ElementDetector:
         width_px = x2 - x1
         height_px = y2 - y1
         
-        # Simple classification: square vs circular columns (based on aspect ratio)
         aspect_ratio = width_px / height_px
-        is_circular = 0.9 < aspect_ratio < 1.1 # Heuristic
+        is_circular = 0.9 < aspect_ratio < 1.1 
         
         return {
             "column_shape": "circular" if is_circular else "rectangular",
-            "material": "Concrete" # Default for structural columns
+            "material": "Concrete"
         }
     
     async def _analyze_wall(self, bbox, image) -> Dict:
         """Extract wall-specific features"""
         x1, y1, x2, y2 = [int(v) for v in bbox]
         wall_region = image[y1:y2, x1:x2]
-        
-        # Estimate thickness from line width
         thickness = await self._estimate_line_thickness(wall_region)
-        
-        # Determine if exterior or interior (based on thickness)
         is_exterior = thickness > 200  # mm
         
         return {
@@ -193,17 +200,9 @@ class Stage3ElementDetector:
         """Extract door-specific features"""
         x1, y1, x2, y2 = [int(v) for v in bbox]
         door_region = image[y1:y2, x1:x2]
-        
-        # Detect swing direction from arc
         swing = await self._detect_door_swing(door_region)
-        
         width = x2 - x1
-        
-        # Classify door type
-        if width > 1800:
-            door_type = "double"
-        else:
-            door_type = "single"
+        door_type = "double" if width > 1800 else "single"
         
         return {
             "door_type": door_type,
@@ -212,66 +211,30 @@ class Stage3ElementDetector:
         }
     
     async def _analyze_window(self, bbox, image) -> Dict:
-        """Extract window-specific features"""
-        # Similar to door analysis
-        return {
-            "window_type": "fixed",  # Simplified
-            "has_sill": True
-        }
+        return {"window_type": "fixed", "has_sill": True}
     
     async def _estimate_line_thickness(self, region: np.ndarray) -> float:
-        """Estimate wall thickness from line width"""
-        # Simplified - actual implementation more complex
         return 200.0  # mm
     
     async def _detect_door_swing(self, region: np.ndarray) -> str:
-        """Detect door swing direction"""
-        # Look for arc pattern
-        # Simplified
         return "right"
     
-    async def _post_process(
-        self,
-        elements: Dict,
-        image: np.ndarray,
-        pixels_per_mm: float
-    ) -> Dict:
+    async def _post_process(self, elements: Dict, image: np.ndarray, pixels_per_mm: float) -> Dict:
         """Post-process detected elements"""
-        
-        # Connect walls that should be continuous
+        # Simplified post-processing logic
         elements["walls"] = await self._connect_walls(elements["walls"])
-        
-        # Find which wall each door/window belongs to
-        elements["doors"] = await self._assign_to_walls(
-            elements["doors"],
-            elements["walls"]
-        )
-        elements["windows"] = await self._assign_to_walls(
-            elements["windows"],
-            elements["walls"]
-        )
-        
-        # Detect rooms from wall boundaries
+        elements["doors"] = await self._assign_to_walls(elements["doors"], elements["walls"])
+        elements["windows"] = await self._assign_to_walls(elements["windows"], elements["walls"])
         elements["rooms"] = await self._detect_rooms(elements["walls"], image)
-        
         return elements
     
     async def _connect_walls(self, walls: List[Dict]) -> List[Dict]:
-        """Connect wall segments that form continuous walls"""
-        # Complex geometry logic here
         return walls
     
     async def _assign_to_walls(self, openings: List[Dict], walls: List[Dict]) -> List[Dict]:
-        """Assign doors/windows to their host walls"""
         for opening in openings:
-            # Find nearest wall
-            opening["host_wall_id"] = 0  # Simplified
+            opening["host_wall_id"] = 0
         return openings
     
     async def _detect_rooms(self, walls: List[Dict], image: np.ndarray) -> List[Dict]:
-        """Detect rooms from wall boundaries"""
-        # Use contour detection to find enclosed spaces
-        rooms = []
-        # Complex logic here
-        return rooms
-
+        return []

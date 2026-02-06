@@ -32,13 +32,6 @@ class RevitClient:
     async def build_model(self, transaction_path: str, job_id: str) -> str:
         """
         Send transaction to Windows server to build RVT
-        
-        Args:
-            transaction_path: Path to transaction JSON
-            job_id: Job identifier
-            
-        Returns:
-            Path to generated RVT file
         """
         logger.info(f"Sending build request to Windows Revit server for job {job_id}")
         
@@ -72,3 +65,36 @@ class RevitClient:
         logger.info(f"RVT file saved to {rvt_path}")
         
         return rvt_path
+    
+    async def render_model(self, rvt_path: str, job_id: str) -> str:
+        """
+        Send existing RVT to Windows server for rendering
+        """
+        logger.info(f"Sending render request for job {job_id}")
+        
+        # Read RVT file
+        with open(rvt_path, 'rb') as f:
+            rvt_content = f.read()
+            
+        # Send request (Multipart upload)
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            files = {'file': (f'{job_id}.rvt', rvt_content, 'application/octet-stream')}
+            response = await client.post(
+                f"{self.server_url}/render-model",
+                data={"job_id": job_id},
+                files=files,
+                headers={"X-API-Key": self.api_key}
+            )
+            
+        if response.status_code != 200:
+            raise Exception(f"Revit rendering error: {response.text}")
+            
+        # Save rendered image
+        render_path = f"data/models/render/{job_id}.png"
+        Path(render_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(render_path, 'wb') as f:
+            f.write(response.content)
+            
+        logger.info(f"Render saved to {render_path}")
+        return render_path
