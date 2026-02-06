@@ -342,7 +342,7 @@ Copy the .addin manifest to the Revit discovery folder:
 
     Result: A native Revit wall appears automatically in the Windows Revit instance.
 
-📋 Status Dashboard (Phase 1)
+📋 Status Dashboard
 📞 Troubleshooting Handshake Issues
 
 If Ubuntu cannot see Revit:
