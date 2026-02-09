@@ -1,26 +1,22 @@
 from pathlib import Path
 from loguru import logger
 import os
-import torch
-from ultralytics import YOLO
-
-from typing import Dict, List, Optional
-import numpy as np
 import sys
+import torch
+import numpy as np
+from typing import Dict, List, Optional
+from ultralytics import YOLO
 
 # Add this before loading the model
 torch.serialization.add_safe_globals([__import__('ultralytics.nn.tasks', fromlist=['DetectionModel']).DetectionModel])
 
 
-
-
-
 class Stage3ElementDetector:
-    """Detect architectural elements using YOLOv8 with dynamic model support"""
+    """Detect architectural elements using YOLOv11 with dynamic model support"""
 
     def __init__(self):
         self.weights_dir = Path(os.getenv("YOLO_WEIGHTS_DIR", "ml_models/weights"))
-        print("YOLOv11_model_path_directory:", self.weights_dir)
+        logger.info(f"YOLOv11_model_path_directory: {self.weights_dir}")
 
         self.confidence = float(os.getenv("DETECTION_CONFIDENCE", 0.6))
         self.nms_threshold = float(os.getenv("NMS_THRESHOLD", 0.4))
@@ -30,9 +26,13 @@ class Stage3ElementDetector:
         self._load_models()
 
     def _load_models(self):
-        """Load available YOLO models dynamically"""
-
-        # Check for specialized models first
+        """
+        Load YOLO model for element detection.
+        Loads yolov11_floorplan.pt (monolithic model).
+        If not found, prompts user whether to proceed with base model.
+        """
+        
+        # Check for specialized models first (optional feature)
         specialized_found = False
         specialized_types = ['wall', 'door', 'window', 'column']
 
@@ -43,22 +43,102 @@ class Stage3ElementDetector:
                 self.models[e_type] = YOLO(str(weight_path))
                 specialized_found = True
 
-        # If no specialized models, or incomplete, check for monolithic model
+        # If no specialized models, load monolithic model (your main model)
         if not specialized_found:
-            monolithic_path = self.weights_dir / "yolov11_floorplan.pt"
-            # Try to load base YOLOv8n if custom model not found
-            # This is a fallback to ensure the system runs even without training
-            try:
-                if monolithic_path.exists():
-                    logger.info(f"Loading monolithic model: {monolithic_path}")
-                    self.models['all'] = YOLO(str(monolithic_path))
+            model_path = self.weights_dir / "yolov11_floorplan.pt"
+            
+            logger.info(f"Looking for custom model at: {model_path}")
+            logger.info(f"Absolute path: {model_path.resolve()}")
+            
+            # Check if custom model exists
+            if model_path.exists() and model_path.is_file():
+                file_size_mb = model_path.stat().st_size / (1024 * 1024)
+                logger.info(f"✓ Found custom model: {model_path.name} ({file_size_mb:.1f} MB)")
+                
+                try:
+                    logger.info("Loading custom YOLO model...")
+                    self.models['all'] = YOLO(str(model_path))
+                    logger.success(f"✓ Successfully loaded custom model: yolov11_floorplan.pt")
+                    logger.info("Model ready for element detection (columns, beams, slabs, grid lines)")
+                    return  # Success - exit method
+                    
+                except Exception as e:
+                    logger.error(f"✗ Failed to load custom model: {e}")
+                    logger.warning("The model file exists but cannot be loaded. It may be corrupted.")
+                    # Fall through to user prompt
+            else:
+                logger.warning(f"✗ Custom model not found at: {model_path}")
+                
+                # Show what's in the weights directory
+                if self.weights_dir.exists():
+                    logger.info(f"Contents of {self.weights_dir}:")
+                    weights_found = False
+                    for item in self.weights_dir.iterdir():
+                        logger.info(f"  - {item.name}")
+                        weights_found = True
+                    if not weights_found:
+                        logger.info("  (directory is empty)")
                 else:
-                    logger.warning("No custom weights found. Using base YOLOv8n (will need fine-tuning)")
-                    self.models['all'] = YOLO('yolov8n.pt')
-            except Exception as e:
-                logger.error(f"Failed to load YOLO model: {e}")
-                # Last resort fallback
-                self.models['all'] = YOLO('yolov8n.pt')
+                    logger.warning(f"Weights directory does not exist: {self.weights_dir}")
+                    logger.info(f"Creating directory: {self.weights_dir}")
+                    self.weights_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Model not found or failed to load - ask user what to do
+            logger.warning("=" * 70)
+            logger.warning("CUSTOM MODEL NOT FOUND OR FAILED TO LOAD")
+            logger.warning("=" * 70)
+            logger.warning("")
+            logger.warning("The trained model 'yolov11_floorplan.pt' was not found or is corrupted.")
+            logger.warning("This model is required for accurate detection of:")
+            logger.warning("  - Columns")
+            logger.warning("  - Beams")
+            logger.warning("  - Slabs")
+            logger.warning("  - Grid Lines")
+            logger.warning("")
+            logger.warning("Options:")
+            logger.warning("  1. Train the model first (RECOMMENDED)")
+            logger.warning("     cd backend/training")
+            logger.warning("     python train_yolo.py ./columns-and-ducts-detection-1")
+            logger.warning("")
+            logger.warning("  2. Use base YOLOv8n model (POOR ACCURACY - testing only)")
+            logger.warning("=" * 70)
+            logger.warning("")
+            
+            # Ask user for confirmation
+            print("\n" + "⚠" * 35)
+            print("WARNING: Custom model not found or failed to load!")
+            print("⚠" * 35)
+            
+            try:
+                response = input("\nDo you want to proceed with base YOLOv8n model? (yes/no): ").strip().lower()
+                
+                if response in ['yes', 'y']:
+                    logger.warning("User chose to proceed with base YOLOv8n model")
+                    logger.warning("⚠ WARNING: Base model is NOT trained for construction elements!")
+                    logger.warning("⚠ Detection accuracy will be VERY POOR until you train a custom model.")
+                    
+                    try:
+                        logger.info("Loading base YOLOv8n model...")
+                        self.models['all'] = YOLO('yolov8n.pt')
+                        logger.warning("✓ Loaded base YOLOv8n (UNTRAINED - for testing only)")
+                        
+                    except Exception as e:
+                        logger.error(f"✗ Failed to load base model: {e}")
+                        logger.error("Cannot proceed without a model. Exiting.")
+                        sys.exit(1)
+                else:
+                    logger.info("User chose not to proceed without custom model")
+                    logger.info("\nPlease train the model first:")
+                    logger.info("  1. cd backend/training")
+                    logger.info("  2. python download_data.py YOUR_ROBOFLOW_API_KEY")
+                    logger.info("  3. python train_yolo.py ./columns-and-ducts-detection-1")
+                    logger.info("  4. cp runs/detect/train/weights/best.pt ../ml/weights/yolov11_floorplan.pt")
+                    logger.info("\nExiting...")
+                    sys.exit(0)
+                    
+            except KeyboardInterrupt:
+                logger.info("\n\nInterrupted by user. Exiting...")
+                sys.exit(0)
 
     async def detect(self, image_data: Dict, scale_info: Dict) -> Dict:
         """
@@ -105,7 +185,7 @@ class Stage3ElementDetector:
         elements_dict: Dict, 
         image: np.ndarray, 
         pixels_per_mm: float,
-        override_type: str = None
+        override_type: Optional[str] = None
     ):
         """Process YOLO results and populate elements dict"""
         for result in results:
@@ -183,7 +263,7 @@ class Stage3ElementDetector:
         width_px = x2 - x1
         height_px = y2 - y1
 
-        aspect_ratio = width_px / height_px
+        aspect_ratio = width_px / height_px if height_px > 0 else 1
         is_circular = 0.9 < aspect_ratio < 1.1 
 
         return {
