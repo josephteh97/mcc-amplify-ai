@@ -15,7 +15,7 @@ class Stage3ElementDetector:
     """Detect architectural elements using YOLOv11 with dynamic model support"""
 
     def __init__(self):
-        self.weights_dir = Path(os.getenv("YOLO_WEIGHTS_DIR", "ml_models/weights"))
+        self.weights_dir = Path(os.getenv("YOLO_WEIGHTS_DIR", "ml/weights"))
         logger.info(f"YOLOv11_model_path_directory: {self.weights_dir}")
 
         self.confidence = float(os.getenv("DETECTION_CONFIDENCE", 0.6))
