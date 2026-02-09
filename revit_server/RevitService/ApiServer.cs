@@ -101,27 +101,56 @@ namespace RevitService
 
         private async Task HandleRenderModel(HttpListenerContext context)
         {
-            // Simple Multipart Parser (Production should use a library like HttpMultipartParser)
-            string boundary = context.Request.ContentType.Split('=')[1];
-            string jobId = "";
-            string tempRvtPath = "";
+            // Simple Multipart Parser logic
+            string contentType = context.Request.ContentType;
+            if (string.IsNullOrEmpty(contentType) || !contentType.Contains("boundary="))
+            {
+                throw new Exception("Invalid Content-Type: Missing boundary");
+            }
+            
+            string boundary = "--" + contentType.Split(new[] { "boundary=" }, StringSplitOptions.None)[1];
+            
+            // Read input stream
+            byte[] buffer = new byte[context.Request.ContentLength64];
+            await context.Request.InputStream.ReadAsync(buffer, 0, buffer.Length);
+            
+            // NOTE: This is a very simplified parser for demonstration.
+            // In a production C# service, assume we are receiving ONE file field named 'file'.
+            // We search for the file content between boundaries.
+            
+            // 1. Find start of file data
+            // Look for: Content-Type: application/octet-stream (or similar) -> \r\n\r\n -> DATA
+            
+            string dataString = Encoding.GetEncoding("iso-8859-1").GetString(buffer);
+            string fileHeader = "Content-Type: application/octet-stream";
+            int headerIndex = dataString.IndexOf(fileHeader);
+            
+            if (headerIndex == -1) throw new Exception("Could not find file content in multipart request");
+            
+            int dataStartIndex = dataString.IndexOf("\r\n\r\n", headerIndex) + 4;
+            
+            // 2. Find end of file data (next boundary)
+            int dataEndIndex = dataString.IndexOf(boundary, dataStartIndex) - 2; // -2 for \r\n before boundary
+            
+            if (dataStartIndex < 0 || dataEndIndex < dataStartIndex) throw new Exception("Failed to parse file boundaries");
+            
+            // 3. Extract file bytes
+            int fileLength = dataEndIndex - dataStartIndex;
+            byte[] fileBytes = new byte[fileLength];
+            Array.Copy(buffer, dataStartIndex, fileBytes, 0, fileLength);
 
-            // NOTE: This is a simplified placeholder for multipart parsing logic.
-            // In a real production environment, use a robust library to extract the file and form fields.
-            // Assuming for now the file is saved to a temp path
-            
-            // ... (Multipart parsing logic would go here) ...
-            
-            // Placeholder: Assume file is saved to C:\RevitOutput\temp\{jobId}.rvt
-            // For now, let's pretend we parsed it:
-            jobId = context.Request.Headers["X-Job-ID"] ?? Guid.NewGuid().ToString(); // Fallback if parsing fails
-            
-            // In a real scenario, you'd save the stream to a file first
-            // var fileStream = ...
+            // 4. Get Job ID (from header or new guid)
+            string jobId = context.Request.Headers["X-Job-ID"] ?? Guid.NewGuid().ToString();
             
             string outputDir = Path.Combine(@"C:\RevitOutput", jobId);
             Directory.CreateDirectory(outputDir);
             
+            string tempRvtPath = Path.Combine(outputDir, "input.rvt");
+            File.WriteAllBytes(tempRvtPath, fileBytes);
+            
+            Console.WriteLine($"Received RVT file for Job {jobId}, size: {fileLength} bytes");
+            
+            // 5. Render
             string renderPath = modelBuilder.RenderModel(tempRvtPath, outputDir);
             
             byte[] imgFile = File.ReadAllBytes(renderPath);
