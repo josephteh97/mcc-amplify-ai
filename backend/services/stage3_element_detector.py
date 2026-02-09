@@ -1,9 +1,11 @@
 from pathlib import Path
 from loguru import logger
 import os
+import torch
+from ultralytics import YOLO
 
-
-
+# Add this before loading the model
+torch.serialization.add_safe_globals([__import__('ultralytics.nn.tasks', fromlist=['DetectionModel']).DetectionModel])
 
 
 
@@ -14,7 +16,6 @@ class Stage3ElementDetector:
     def __init__(self):
         self.weights_dir = Path(os.getenv("YOLO_WEIGHTS_DIR", "ml_models/weights"))
         print("YOLOv11_model_path_directory:", self.weights_dir)
-
 
         self.confidence = float(os.getenv("DETECTION_CONFIDENCE", 0.6))
         self.nms_threshold = float(os.getenv("NMS_THRESHOLD", 0.4))
@@ -39,7 +40,7 @@ class Stage3ElementDetector:
 
         # If no specialized models, or incomplete, check for monolithic model
         if not specialized_found:
-            monolithic_path = self.weights_dir / "yolov8_floorplan.pt"
+            monolithic_path = self.weights_dir / "yolov11_floorplan.pt"
             # Try to load base YOLOv8n if custom model not found
             # This is a fallback to ensure the system runs even without training
             try:
