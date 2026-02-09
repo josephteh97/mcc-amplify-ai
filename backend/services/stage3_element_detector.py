@@ -11,13 +11,20 @@ from typing import Dict, List, Optional
 from pathlib import Path
 from loguru import logger
 import os
+from pathlib import Path
+
+# Get the project root directory
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+MODEL_PATH = PROJECT_ROOT / "backend" / "ml" / "weights" / "yolov11_floorplan.pt"
 
 
 class Stage3ElementDetector:
     """Detect architectural elements using YOLOv8 with dynamic model support"""
     
     def __init__(self):
-        self.weights_dir = Path(os.getenv("YOLO_WEIGHTS_DIR", "ml_models/weights"))
+        # self.weights_dir = Path(os.getenv("YOLO_WEIGHTS_DIR", "ml_models/weights"))
+        self.weights_dir = MODEL_PATH
+        print(f"YOLO_weight_directory: {self.weights_dir}")
         self.confidence = float(os.getenv("DETECTION_CONFIDENCE", 0.6))
         self.nms_threshold = float(os.getenv("NMS_THRESHOLD", 0.4))
         
