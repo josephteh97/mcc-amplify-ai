@@ -48,7 +48,7 @@ class Stage3ElementDetector:
         
         # If no specialized models, or incomplete, check for monolithic model
         if not specialized_found:
-            monolithic_path = self.weights_dir / "yolov8_floorplan.pt"
+            monolithic_path = self.weights_dir / "yolov11_floorplan.pt"
             # Try to load base YOLOv8n if custom model not found
             # This is a fallback to ensure the system runs even without training
             try:
