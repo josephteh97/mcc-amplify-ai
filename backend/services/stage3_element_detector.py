@@ -47,8 +47,8 @@ class Stage3ElementDetector:
         if not specialized_found:
             model_path = self.weights_dir / "yolov11_floorplan.pt"
             
-            logger.info(f"Looking for custom model at: {model_path}")
-            logger.info(f"Absolute path: {model_path.resolve()}")
+            # logger.info(f"Looking for custom model at: {model_path}")
+            # logger.info(f"Absolute path: {model_path.resolve()}")
             
             # Check if custom model exists
             if model_path.exists() and model_path.is_file():
@@ -59,7 +59,7 @@ class Stage3ElementDetector:
                     logger.info("Loading custom YOLO model...")
                     self.models['all'] = YOLO(str(model_path))
                     logger.success(f"✓ Successfully loaded custom model: yolov11_floorplan.pt")
-                    logger.info("Model ready for element detection (columns, beams, slabs, grid lines)")
+                    # logger.info("Model ready for element detection (columns, beams, slabs, grid lines)")
                     return  # Success - exit method
                     
                 except Exception as e:
