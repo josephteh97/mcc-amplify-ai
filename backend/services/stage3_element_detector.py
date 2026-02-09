@@ -4,8 +4,13 @@ import os
 import torch
 from ultralytics import YOLO
 
+from typing import Dict, List, Optional
+import numpy as np
+import sys
+
 # Add this before loading the model
 torch.serialization.add_safe_globals([__import__('ultralytics.nn.tasks', fromlist=['DetectionModel']).DetectionModel])
+
 
 
 
