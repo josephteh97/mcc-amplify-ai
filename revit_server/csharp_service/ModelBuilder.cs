@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
+using Autodesk.Revit.DB.Structure;
 using Serilog;
 using Newtonsoft.Json.Linq;
 
@@ -158,7 +159,7 @@ namespace RevitService
 
             if (hostWall != null && level != null)
             {
-                _doc.Create.NewFamilyInstance(location, symbol, hostWall, level, Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+                _doc.Create.NewFamilyInstance(location, symbol, hostWall, level, StructuralType.NonStructural);
             }
         }
 
@@ -173,7 +174,7 @@ namespace RevitService
              
              if (level != null)
              {
-                 _doc.Create.NewFamilyInstance(location, symbol, level, Autodesk.Revit.DB.Structure.StructuralType.Column);
+                 _doc.Create.NewFamilyInstance(location, symbol, level, StructuralType.Column);
              }
         }
 
