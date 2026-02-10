@@ -13,8 +13,8 @@ const UploadPanel = ({ onJobCreated, onProcessingComplete }) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
       // Accept PDF or RVT
-      const isPdf = selectedFile.name.toLowerCase().endswith('.pdf');
-      const isRvt = selectedFile.name.toLowerCase().endswith('.rvt');
+      const isPdf = selectedFile.name.toLowerCase().endsWith('.pdf');
+      const isRvt = selectedFile.name.toLowerCase().endsWith('.rvt');
       
       if (isPdf || isRvt) {
         setFile(selectedFile);
