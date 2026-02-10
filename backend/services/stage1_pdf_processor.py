@@ -49,11 +49,19 @@ class Stage1PDFProcessor:
         # Use first page (support multi-page later)
         image = images[0]
         
+        # Ensure 3 channels (RGB)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
         # Convert PIL to numpy
         image_np = np.array(image)
         
         # Preprocess image
         processed = await self._preprocess_image(image_np)
+        
+        # Ensure processed image is RGB (3 channels) for YOLO
+        if len(processed.shape) == 2:
+            processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2RGB)
         
         return {
             "image": processed,
