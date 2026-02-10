@@ -16,19 +16,22 @@ class Stage4LocalQwenAnalyzer:
     """Use local Qwen2.5-VL for semantic understanding and recipe generation"""
     
     def __init__(self):
-        # Default to Hugging Face Hub ID instead of local path if local path is invalid
-        # Use "Qwen/Qwen2.5-VL-7B-Instruct" for auto-download
-        self.model_path = os.getenv("Qwen_MODEL_PATH", "Qwen/Qwen2.5-VL-7B-Instruct")
+        # Switch to lighter model as per user request to avoid OOM
+        # Default: "Qwen/Qwen2.5-VL-3B-Instruct"
+        self.model_path = os.getenv("Qwen_MODEL_PATH", "Qwen/Qwen2.5-VL-3B-Instruct")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         try:
             logger.info(f"Loading Qwen2.5-VL from {self.model_path} on {self.device}...")
             
-            # Load Model
+            # Load Model with memory optimization
+            # 1. Use float16 (half precision)
+            # 2. device_map="auto" allows offloading to CPU if GPU is full
             self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                 self.model_path,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                device_map="auto"
+                device_map="auto",
+                low_cpu_mem_usage=True
             )
             
             # Load Processor
