@@ -48,7 +48,7 @@ echo ⏳ Waiting for Revit to initialize...
 set /a retry_count=0
 
 :CHECK_PORT
-timeout /t 10 /nobreak > nul
+timeout /t 15 /nobreak > nul
 set /a retry_count+=1
 
 echo.
