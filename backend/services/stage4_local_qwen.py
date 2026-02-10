@@ -29,7 +29,7 @@ class Stage4LocalQwenAnalyzer:
             # 2. device_map="auto" allows offloading to CPU if GPU is full
             self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                 self.model_path,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                torch_dtype=torch.float32 if self.device == "cuda" else torch.float32,
                 device_map="auto",
                 low_cpu_mem_usage=True
             )
