@@ -15,10 +15,10 @@ namespace RevitService
 {
     public class Program : IExternalApplication
     {
-        private static Config? _config;
+        private static Config _config;
         private static bool _isRunning = true;
-        private static RevitBuildHandler? _handler;
-        private static ExternalEvent? _externalEvent;
+        private static RevitBuildHandler _handler;
+        private static ExternalEvent _externalEvent;
 
         public Result OnStartup(UIControlledApplication application)
         {

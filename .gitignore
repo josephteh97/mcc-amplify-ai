@@ -510,6 +510,10 @@ deployment/
 !.trae
 .trae/*
 
+# keep model.cs.backup files
+!**/*.cs.backup_*
+*.backup_*
+
 # ============================================
 # NOTES
 # ============================================

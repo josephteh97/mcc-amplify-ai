@@ -14,7 +14,7 @@ namespace RevitService
     {
         private readonly Application _app;
         private readonly Config _config;
-        private Document? _doc;
+        private Document _doc;
         private readonly CommandProcessor _commandProcessor;
         private const double MM_TO_FEET = 1.0 / 304.8;
 
@@ -25,7 +25,7 @@ namespace RevitService
             _commandProcessor = new CommandProcessor();
         }
 
-        public Document? Doc => _doc;
+        public Document Doc => _doc;
 
         public async Task<string> BuildModel(RevitRecipe recipe, string outputPath)
         {
@@ -158,7 +158,7 @@ namespace RevitService
 
             if (hostWall != null && level != null)
             {
-                _doc.Create.NewFamilyInstance(location, symbol, hostWall, level, StructuralType.NonStructural);
+                _doc.Create.NewFamilyInstance(location, symbol, hostWall, level, Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
             }
         }
 
@@ -173,7 +173,7 @@ namespace RevitService
              
              if (level != null)
              {
-                 _doc.Create.NewFamilyInstance(location, symbol, level, StructuralType.Column);
+                 _doc.Create.NewFamilyInstance(location, symbol, level, Autodesk.Revit.DB.Structure.StructuralType.Column);
              }
         }
 

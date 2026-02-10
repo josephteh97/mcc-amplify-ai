@@ -35,7 +35,7 @@ namespace RevitService
                 }
 
                 // Create new document from template
-                string templatePath = @"C:\ProgramData\Autodesk\RVT 2022\Templates\Architectural Template.rte";
+                string templatePath = @"C:\ProgramData\Autodesk\RVT 2023\Templates\Architectural Template.rte";
                 doc = revitApp.NewProjectDocument(templatePath);
 
                 using (Transaction trans = new Transaction(doc, "Build Floor Plan Model"))
@@ -161,7 +161,7 @@ namespace RevitService
                     doorSymbol,
                     hostWall,
                     level,
-                    StructuralType.NonStructural
+                    Autodesk.Revit.DB.Structure.StructuralType.NonStructural
                 );
 
                 if (doorCmd.Parameters.Rotation != 0)
@@ -198,7 +198,7 @@ namespace RevitService
                     winSymbol,
                     hostWall,
                     level,
-                    StructuralType.NonStructural
+                    Autodesk.Revit.DB.Structure.StructuralType.NonStructural
                 );
             }
         }
