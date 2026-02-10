@@ -86,3 +86,13 @@ app.include_router(api_router, prefix="/api")
 # Serve static files (frontend build)
 if Path("../frontend/dist").exists():
     app.mount("/", StaticFiles(directory="../frontend/dist", html=True), name="static")
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
