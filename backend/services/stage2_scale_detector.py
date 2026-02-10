@@ -9,6 +9,7 @@ import re
 from typing import Dict, Optional, Tuple
 from loguru import logger
 import os
+import numpy as np
 
 
 class Stage2ScaleDetector:
