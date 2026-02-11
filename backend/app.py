@@ -83,6 +83,19 @@ app.add_middleware(
 # Include API routes
 app.include_router(api_router, prefix="/api")
 
+@app.get("/")
+async def root():
+    """Root endpoint - serves frontend"""
+    # Check if frontend build exists
+    if Path("../frontend/dist/index.html").exists():
+        return FileResponse("../frontend/dist/index.html")
+    else:
+        # Fallback for development mode
+        return {
+            "message": "Backend is running. For frontend, run 'npm run dev' in the frontend directory and visit http://localhost:5173",
+            "docs": "/api/docs"
+        }
+
 # Serve static files (frontend build)
 if Path("../frontend/dist").exists():
     app.mount("/", StaticFiles(directory="../frontend/dist", html=True), name="static")
