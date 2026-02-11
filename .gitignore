@@ -530,3 +530,4 @@ deployment/
 # To check if a file is ignored:
 #   git check-ignore -v filename
 #
+claude_key.txt
