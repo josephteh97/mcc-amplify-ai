@@ -531,3 +531,5 @@ deployment/
 #   git check-ignore -v filename
 #
 claude_key.txt
+backend/google_key.txt
+google_key.txt
