@@ -36,7 +36,7 @@ class Stage4SemanticAnalyzer:
         
         # Configure Gemini client
         self.client = genai.Client(api_key=api_key)
-        self.model_id = "gemini-1.5-flash"  # Stable, available model
+        self.model_id = "gemini-2.5-flash"  # Latest model from the list
         logger.info(f"✓ Google Gemini initialized with model: {self.model_id}")
     
     async def analyze(
