@@ -12,6 +12,9 @@ from loguru import logger
 from PIL import Image
 import io
 
+from dotnev import load_dotenv
+load_dotenv()
+
 
 class Stage4SemanticAnalyzer:
     """Use Claude AI for semantic understanding"""
