@@ -19,7 +19,7 @@ class Stage4LocalQwenAnalyzer:
         # Switch to lighter model as per user request to avoid OOM
         # Default: "Qwen/Qwen2.5-VL-3B-Instruct"
         self.model_path = os.getenv("Qwen_MODEL_PATH", "Qwen/Qwen2.5-VL-3B-Instruct")
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu" if torch.cuda.is_available() else "cpu"
         
         try:
             logger.info(f"Loading Qwen2.5-VL from {self.model_path} on {self.device}...")
@@ -83,10 +83,17 @@ class Stage4LocalQwenAnalyzer:
             padding=True,
             return_tensors="pt",
         )
+
+        
+        # Ensure all inputs are on CPU
+        inputs['input_ids'] = inputs['input_ids'].to('cpu')
+        inputs['attention_mask'] = inputs['attention_mask'].to('cpu') 
+        inputs['pixel_values'] = inputs['pixel_values'].to('cpu')
         inputs = inputs.to(self.device)
 
         # Generate
         generated_ids = self.model.generate(**inputs, max_new_tokens=4096)
+        output_ids = output_ids.cpu()  # Move to CPU
         generated_ids_trimmed = [
             out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
