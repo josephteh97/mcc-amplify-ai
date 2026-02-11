@@ -100,7 +100,7 @@ qwen-vl-utils==0.0.14
 # Semantic Analyzer
 # ----------------
 anthropic==0.79.0
-google-generativeai==0.8.6
+google-genai==1.62.0
 
 # GPU Support:
 # -----------
