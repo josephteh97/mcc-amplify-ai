@@ -22,7 +22,8 @@ class Stage4SemanticAnalyzer:
             raise ValueError("ANTHROPIC_API_KEY not set")
         
         self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = "claude-sonnet-4-20250514"
+        # Updated to latest stable model
+        self.model = "claude-3-5-sonnet-20240620"
     
     async def analyze(
         self,
