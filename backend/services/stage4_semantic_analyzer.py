@@ -12,21 +12,29 @@ from loguru import logger
 from PIL import Image
 import io
 
-from dotenv import load_dotenv
-load_dotenv()
-
 
 class Stage4SemanticAnalyzer:
     """Use Claude AI for semantic understanding"""
     
     def __init__(self):
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        # Try to read from claude_key.txt first
+        api_key = None
+        key_file_path = os.path.join(os.path.dirname(__file__), '..', 'claude_key.txt')
+        
+        try:
+            with open(key_file_path, 'r') as f:
+                api_key = f.read().strip()
+            logger.info(f"✓ Loaded API key from claude_key.txt")
+        except FileNotFoundError:
+            logger.error(f"✗ Could not find {key_file_path}")
+        except Exception as e:
+            logger.error(f"✗ Error reading API key file: {e}")
+        
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not set")
+            raise ValueError("ANTHROPIC_API_KEY not found in claude_key.txt")
         
         self.client = anthropic.Anthropic(api_key=api_key)
-        # Updated to latest stable model
-        self.model = "claude-3-5-sonnet-20240620"
+        self.model = "claude-3-5-sonnet-20241022"
     
     async def analyze(
         self,
