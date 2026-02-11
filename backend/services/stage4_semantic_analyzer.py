@@ -1,40 +1,43 @@
 """
-Stage 4: Semantic Analysis with Claude AI
-Validates and enriches detected data
+Stage 4: Semantic Analysis with Google Gemini
+Using the new google-genai package
 """
 
-import anthropic
 import os
-import base64
 import json
 from typing import Dict
 from loguru import logger
 from PIL import Image
-import io
+from google import genai
+from google.genai import types
 
 
 class Stage4SemanticAnalyzer:
-    """Use Claude AI for semantic understanding"""
+    """Use Google Gemini for semantic understanding"""
     
     def __init__(self):
-        # Try to read from claude_key.txt first
+        # Read from google_key.txt
         api_key = None
-        key_file_path = os.path.join(os.path.dirname(__file__), '..', 'claude_key.txt')
+        key_file_path = os.path.join(os.path.dirname(__file__), '..', 'google_key.txt')
         
         try:
             with open(key_file_path, 'r') as f:
                 api_key = f.read().strip()
-            logger.info(f"✓ Loaded API key from claude_key.txt")
+            logger.info(f"✓ Loaded Google API key from google_key.txt")
         except FileNotFoundError:
             logger.error(f"✗ Could not find {key_file_path}")
+            raise ValueError("google_key.txt not found")
         except Exception as e:
             logger.error(f"✗ Error reading API key file: {e}")
+            raise
         
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in claude_key.txt")
+            raise ValueError("GOOGLE_API_KEY not found in google_key.txt")
         
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = "claude-3-5-sonnet-20241022"
+        # Configure Gemini client
+        self.client = genai.Client(api_key=api_key)
+        self.model_id = "gemini-2.0-flash-exp"  # Latest model
+        logger.info("✓ Google Gemini initialized")
     
     async def analyze(
         self,
@@ -43,7 +46,7 @@ class Stage4SemanticAnalyzer:
         scale_info: Dict
     ) -> Dict:
         """
-        Analyze floor plan with Claude AI
+        Analyze floor plan with Google Gemini
         
         Args:
             image_data: Processed image
@@ -53,63 +56,51 @@ class Stage4SemanticAnalyzer:
         Returns:
             Enriched and validated data
         """
-        logger.info("Analyzing with Claude AI...")
+        logger.info("Analyzing with Google Gemini...")
         
-        # Convert image to base64
-        image = image_data["image"]
-        image_b64 = await self._image_to_base64(image)
+        # Convert to PIL Image
+        pil_image = Image.fromarray(image_data["image"])
         
         # Create analysis prompt
         prompt = self._create_prompt(detected_elements, scale_info)
         
-        # Call Claude API
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=4000,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": image_b64
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt
-                    }
-                ]
-            }]
-        )
-        
-        # Parse response
-        response_text = message.content[0].text
-        
-        # Clean and parse JSON
-        response_text = response_text.replace('```json', '').replace('```', '').strip()
-        analysis = json.loads(response_text)
-        
-        # Merge with detected elements
-        enriched = await self._merge_data(detected_elements, analysis)
-        
-        logger.info("Claude analysis complete")
-        
-        return enriched
-    
-    async def _image_to_base64(self, image) -> str:
-        """Convert numpy image to base64"""
-        pil_image = Image.fromarray(image)
-        buffer = io.BytesIO()
-        pil_image.save(buffer, format='PNG')
-        return base64.b64encode(buffer.getvalue()).decode()
+        # Call Gemini API with image and text
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=[prompt, pil_image],
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=4000,
+                )
+            )
+            
+            response_text = response.text
+            
+            # Clean and parse JSON
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+            analysis = json.loads(response_text)
+            
+            # Merge with detected elements
+            enriched = await self._merge_data(detected_elements, analysis)
+            
+            logger.info("✓ Gemini analysis complete")
+            
+            return enriched
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse Gemini JSON output: {e}")
+            logger.error(f"Raw output: {response_text}")
+            # Fallback: return detected elements without enrichment
+            return detected_elements
+        except Exception as e:
+            logger.error(f"Gemini API error: {e}")
+            raise
     
     def _create_prompt(self, detected_elements: Dict, scale_info: Dict) -> str:
-        """Create analysis prompt for Claude"""
+        """Create analysis prompt for Gemini"""
         
-        return f"""You are an expert architectural analyst. Analyze this floor plan and validate/enrich the detected elements.
+        return f"""You are an expert architectural analyst. Analyze this floor plan image and validate/enrich the detected elements.
 
 Detected Data:
 - Scale: {scale_info['scale_string']}
@@ -118,8 +109,9 @@ Detected Data:
 - Windows: {len(detected_elements['windows'])} detected
 - Rooms: {len(detected_elements['rooms'])} detected
 
-Please provide analysis in JSON format:
+Task: Provide architectural analysis in strict JSON format.
 
+Required JSON schema:
 {{
   "building_type": "residential/commercial/mixed",
   "construction_type": "concrete/timber/steel",
@@ -172,18 +164,18 @@ Please provide analysis in JSON format:
   }}
 }}
 
-Respond ONLY with valid JSON, no preamble."""
+IMPORTANT: Respond with ONLY valid JSON. No preamble, no explanation, just the JSON object."""
     
     async def _merge_data(
         self,
         detected: Dict,
         analysis: Dict
     ) -> Dict:
-        """Merge detected data with Claude's analysis"""
+        """Merge detected data with Gemini's analysis"""
         
         enriched = detected.copy()
         
-        # Add Claude's validations and inferences
+        # Add Gemini's validations and inferences
         enriched["metadata"] = {
             "building_type": analysis.get("building_type"),
             "construction_type": analysis.get("construction_type"),
@@ -196,6 +188,22 @@ Respond ONLY with valid JSON, no preamble."""
             if i < len(validated_walls):
                 wall.update(validated_walls[i])
         
-        # Similar for doors, windows, rooms
+        # Enrich doors
+        validated_doors = analysis.get("validated_elements", {}).get("doors", [])
+        for i, door in enumerate(enriched["doors"]):
+            if i < len(validated_doors):
+                door.update(validated_doors[i])
+        
+        # Enrich windows
+        validated_windows = analysis.get("validated_elements", {}).get("windows", [])
+        for i, window in enumerate(enriched["windows"]):
+            if i < len(validated_windows):
+                window.update(validated_windows[i])
+        
+        # Enrich rooms
+        validated_rooms = analysis.get("validated_elements", {}).get("rooms", [])
+        for i, room in enumerate(enriched["rooms"]):
+            if i < len(validated_rooms):
+                room.update(validated_rooms[i])
         
         return enriched
