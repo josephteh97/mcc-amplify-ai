@@ -4,7 +4,7 @@
 # ----------------
 # Web Framework
 # ----------------
-fastapi==0.104.1
+fastapi==0.128.7
 uvicorn[standard]==0.24.0.post1   # minor patch bump if desired (safe)
 python-multipart==0.0.6
 websockets==12.0
