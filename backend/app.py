@@ -14,7 +14,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
-from core.pipeline import FloorPlanPipeline
+from backend.core.pipeline import FloorPlanPipeline
 from api.routes import router as api_router
 from api.websocket import manager as ws_manager
 from utils.logger import setup_logger
