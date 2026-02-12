@@ -1,29 +1,38 @@
 """
-Stage 1: PDF Processing & Preprocessing
-Converts PDF to high-resolution images
+Stage 1: PDF Processing
+Converts PDF to high-resolution image
 """
 
 import fitz  # PyMuPDF
-from pdf2image import convert_from_path
-import cv2
-import numpy as np
 from PIL import Image
-from pathlib import Path
-from typing import Dict, List
+import numpy as np
+from typing import Dict
 from loguru import logger
 import os
 
+# INCREASE PIL IMAGE SIZE LIMIT
+# Image.MAX_IMAGE_PIXELS = None  # Remove limit entirely
+# OR set a higher limit:
+Image.MAX_IMAGE_PIXELS = 500000000  # 500 million pixels  normally 139493228 for A0 paper
+
 
 class Stage1PDFProcessor:
-    """Extract images and vectors from PDF"""
+    """Convert PDF to processable image format"""
     
-    def __init__(self):
-        self.dpi = int(os.getenv("PDF_DPI", 300))
-        self.max_size = int(os.getenv("IMAGE_MAX_SIZE", 4096))
+    def __init__(self, dpi: int = 300):
+        """
+        Args:
+            dpi: Resolution for PDF conversion (default 300)
+                 Lower DPI = smaller images, faster processing
+                 Higher DPI = more detail, slower processing
+        """
+        self.dpi = dpi
+        # For very large PDFs, you might want to use 150 or 200 DPI
+        self.max_dimension = 8000  # Maximum width or height in pixels
     
     async def process(self, pdf_path: str) -> Dict:
         """
-        Convert PDF to high-resolution image
+        Convert PDF to image
         
         Args:
             pdf_path: Path to PDF file
@@ -33,91 +42,52 @@ class Stage1PDFProcessor:
         """
         logger.info(f"Processing PDF: {pdf_path}")
         
-        # Try to extract vector data first
-        has_vector = await self._try_extract_vector(pdf_path)
+        if not os.path.exists(pdf_path):
+            raise FileNotFoundError(f"PDF not found: {pdf_path}")
         
-        # Convert to raster image
-        images = convert_from_path(
-            pdf_path,
-            dpi=self.dpi,
-            fmt='png'
-        )
+        # Open PDF
+        doc = fitz.open(pdf_path)
         
-        if not images:
-            raise ValueError("Failed to convert PDF to image")
+        if len(doc) == 0:
+            raise ValueError("PDF has no pages")
         
-        # Use first page (support multi-page later)
-        image = images[0]
+        # Get first page (floor plans are usually single page)
+        page = doc[0]
         
-        # Ensure 3 channels (RGB)
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
+        # Calculate zoom based on DPI
+        zoom = self.dpi / 72  # 72 is default PDF DPI
+        mat = fitz.Matrix(zoom, zoom)
         
-        # Convert PIL to numpy
-        image_np = np.array(image)
+        # Render page to image
+        pix = page.get_pixmap(matrix=mat)
         
-        # Preprocess image
-        processed = await self._preprocess_image(image_np)
+        # Convert to PIL Image
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         
-        # Ensure processed image is RGB (3 channels) for YOLO
-        if len(processed.shape) == 2:
-            processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2RGB)
+        # Check if image is too large and resize if needed
+        width, height = img.size
+        max_dim = max(width, height)
+        
+        if max_dim > self.max_dimension:
+            logger.warning(
+                f"Image too large ({width}x{height}), resizing to fit {self.max_dimension}px"
+            )
+            scale = self.max_dimension / max_dim
+            new_width = int(width * scale)
+            new_height = int(height * scale)
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            logger.info(f"Resized to {new_width}x{new_height}")
+        
+        # Convert to numpy array
+        image_array = np.array(img)
+        
+        doc.close()
+        
+        logger.info(f"PDF converted: {image_array.shape}")
         
         return {
-            "image": processed,
-            "original_size": image_np.shape,
-            "has_vector_data": has_vector,
-            "dpi": self.dpi
+            "image": image_array,
+            "width": image_array.shape[1],
+            "height": image_array.shape[0],
+            "original_pdf": pdf_path
         }
-    
-    async def _try_extract_vector(self, pdf_path: str) -> bool:
-        """Try to extract vector data from PDF"""
-        try:
-            doc = fitz.open(pdf_path)
-            page = doc[0]
-            
-            # Check for vector paths
-            paths = page.get_drawings()
-            
-            doc.close()
-            
-            return len(paths) > 0
-            
-        except Exception as e:
-            logger.warning(f"Could not extract vector data: {e}")
-            return False
-    
-    async def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
-        """
-        Enhance image quality for better detection
-        """
-        # Convert to grayscale if needed
-        if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = image
-        
-        # Denoise
-        denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-        
-        # Increase contrast
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        enhanced = clahe.apply(denoised)
-        
-        # Binarization (threshold)
-        _, binary = cv2.threshold(
-            enhanced, 
-            0, 
-            255, 
-            cv2.THRESH_BINARY + cv2.THRESH_OTSU
-        )
-        
-        # Resize if too large
-        h, w = binary.shape
-        if max(h, w) > self.max_size:
-            scale = self.max_size / max(h, w)
-            new_w = int(w * scale)
-            new_h = int(h * scale)
-            binary = cv2.resize(binary, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        
-        return binary
