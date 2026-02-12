@@ -11,11 +11,11 @@ from backend.service.pdf_processing.processors import StreamingProcessor
 from backend.service.fusion.pipeline import HybridFusionPipeline
 
 # Wrappers for existing legacy services (to reuse YOLO/Claude logic)
-from services.stage3_element_detector import Stage3ElementDetector
-from services.stage4_semantic_analyzer import Stage4SemanticAnalyzer
-from services.stage5_geometry_generator import Stage5GeometryGenerator
-from services.stage7_exporters.rvt_exporter import RvtExporter
-from services.stage7_exporters.gltf_exporter import GltfExporter
+from backend.services.stage3_element_detector import Stage3ElementDetector
+from backend.services.stage4_semantic_analyzer import Stage4SemanticAnalyzer
+from backend.services.stage5_geometry_generator import Stage5GeometryGenerator
+from backend.services.stage7_exporters.rvt_exporter import RvtExporter
+from backend.services.stage7_exporters.gltf_exporter import GltfExporter
 
 class PipelineOrchestrator:
     """

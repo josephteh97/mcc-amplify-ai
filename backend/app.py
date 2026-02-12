@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 """
 Main FastAPI Application
 Amplify-Like Floor Plan to BIM System

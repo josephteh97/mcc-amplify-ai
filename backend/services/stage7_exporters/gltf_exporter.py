@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 from loguru import logger
 
-class GLTFExporter:
+class GltfExporter:
     async def export(self, geometry_data: dict, output_path: str) -> str:
         """Export geometry to glTF/GLB"""
         logger.info(f"Exporting glTF to {output_path}")

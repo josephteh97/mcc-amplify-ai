@@ -3,9 +3,9 @@ Stage 7: RVT Exporter
 Handles communication with Windows Revit Server to generate .RVT files
 """
 
-from services.revit_client import RevitClient
+from backend.services.revit_client import RevitClient
 
-class RVTExporter:
+class RvtExporter:
     def __init__(self):
         self.client = RevitClient()
         
